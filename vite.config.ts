@@ -34,4 +34,6 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+  // <-- Added this to handle .xlsx files
+  assetsInclude: ["**/*.xlsx"],
 });

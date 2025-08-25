@@ -19,6 +19,8 @@ import Calendar from "@/pages/Calendar";
 import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import UserProfiles from "@/pages/admin/UserProfiles";
+import HistoricalDataVisualize from "@/pages/HistoricalDataVisualize";
+import MapComponent from "@/components/MapComponent"; // Import the MapComponent
 
 function Router() {
   return (
@@ -32,11 +34,13 @@ function Router() {
       <Route path="/mail" component={Mail} />
       <Route path="/rti" component={RTI} />
       <Route path="/sea-level" component={SeaLevel} />
+      <Route path="/hdVisualize" component={HistoricalDataVisualize} />
       <Route path="/contact" component={Contact} />
       <Route path="/calendar" component={Calendar} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/users" component={UserProfiles} />
+      <Route path="/map" component={MapComponent} /> {/* Add the new route for the map */}
       <Route component={NotFound} />
     </Switch>
   );
