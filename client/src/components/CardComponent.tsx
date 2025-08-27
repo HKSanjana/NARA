@@ -24,7 +24,9 @@ const CardComponent: React.FC<CardProps> = ({ card }) => {
         </div>
       </div>
     </div>
+    
   );
+  
 };
 
 export default CardComponent;

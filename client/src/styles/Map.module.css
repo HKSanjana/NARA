@@ -1,131 +1,115 @@
 .forBlanks {
-  background-image: url("assets/images/bg/destination.jpg");
+    background-image: url("assets/images/bg/destination.jpg");
 }
 
 .mapView {
-  width: 50%;
-  border-radius: 20px;
+    width: 50%;
+    border-radius: 20px;
 }
 
 .cardContainer {
-  margin-left: 50vw;
-  margin-top: 5%;
-  position: absolute;
+    margin-left: 50vw;
+    margin-top: 5%;
+    position: absolute;
 }
 
 .xCard {
-  visibility: visible;
+    visibility: visible;
 }
 
 .yCard, .yCardN {
-  visibility: hidden;
-  padding-left: 20vw;
-  height: 0;
+    visibility: hidden;
+    padding-left: 20vw;
+    height: 0;
 }
 
 @media (max-width: 749px) {
-  .cardContainer {
-    visibility: hidden;
-    width: 0;
-    height: 0;
-    margin-left: 0vw;
-    margin-top: 5%;
-    position: static;
-  }
+    .cardContainer {
+        visibility: hidden;
+        width: 0;
+        height: 0;
+        margin-left: 0vw;
+        margin-top: 5%;
+        position: static;
+    }
 
-  .xCard {
-    visibility: hidden;
-    width: 0;
-  }
+    .xCard {
+        visibility: hidden;
+        width: 0;
+    }
 
-  .yCard, .yCardN {
-    visibility: visible;
-    height: auto;
-  }
+    .yCard, .yCardN {
+        visibility: visible;
+        height: auto;
+    }
 }
 
-#map-area {
-  position: absolute;
-  left: 1%;
-  top: 5%;
-  height: 300px;
-  width: 300px;
-  visibility: visible;
+#mapArea {
+    position: absolute;
+    left: 65%;
+    height: 400px;
+    width: 398px;
+    visibility: visible;
+}
+
+#Figure {
+    position: absolute;
+    left: 1000px;
+    width: 450px;
+    height: auto;
+    visibility: visible;
+    margin-top: 650px;
 }
 
 .cls1, .cls2, .cls3, .cls4, .cls5, .cls6, .cls7 {
-  stroke: #000;
-  stroke-miterlimit: 10;
+    stroke: #000;
+    stroke-miterlimit: 10;
 }
 
-.cls1 {
-  fill: #c8f7a9;
-}
-
-.cls2 {
-  fill: #c8f7a9;
-}
-
-.cls3 {
-  fill: #c8f7a9;
-}
-
-.cls4 {
-  fill: #c8f7a9;
-}
-
-.cls5 {
-  fill: #c8f7a9;
-}
-
-.cls6 {
-  fill: #c8f7a9;
-}
-
-.cls7 {
-  fill: #c8f7a9;
+.cls1, .cls2, .cls3, .cls4, .cls5, .cls6, .cls7 {
+    fill: #c8f7a9;
 }
 
 .western {
-  fill: #9d550e;
+    fill: #9d550e;
 }
 
 .central {
-  fill: #f1ac35;
+    fill: #f1ac35;
 }
 
 .northcentral {
-  fill: #f1eb4b;
+    fill: #f1eb4b;
 }
 
 .eastern {
-  fill: #f6502a;
+    fill: #f6502a;
 }
 
 .northern {
-  fill: #99f777f9;
+    fill: #99f777f9;
 }
 
 .northwestern {
-  fill: #e87853;
+    fill: #e87853;
 }
 
 .sabaragamuwa {
-  fill: rgb(163, 199, 2);
+    fill: rgb(163, 199, 2);
 }
 
 .southern {
-  fill: #3aee3d;
+    fill: #3aee3d;
 }
 
 .uva {
-  fill: rgb(221, 136, 16);
+    fill: rgb(221, 136, 16);
 }
 
 svg path {
-  cursor: pointer;
+    cursor: pointer;
 }
 
 svg path:hover {
-  fill: pink;
+    fill: pink;
 }

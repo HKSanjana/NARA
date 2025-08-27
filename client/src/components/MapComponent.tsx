@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { provinces, cardData, CardData } from '../data/data';
 import CardComponent from './CardComponent';
-import styles from '../styles/Map.module.css';
+import styles from '@/styles/Map.module.css';
+import { Waves, TrendingUp, RefreshCw } from 'lucide-react';
+
+
 
 // This is a simplified version of your data for demonstration purposes.
 // In a real-world scenario, you would import these from the actual file.
@@ -70,7 +73,7 @@ const MapComponent: React.FC = () => {
       <div className="container mt-5">
         <div className={styles.mapView}>
           <div id="map-animation">
-            <div id="map-area">
+            <div id={styles.mapArea}>
               <svg id="Map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 462.09 739.7" className={styles.position}>
                 {Object.keys(PROVINCE_PATHS).map(provinceId => (
                   <path
@@ -82,19 +85,98 @@ const MapComponent: React.FC = () => {
                     onClick={() => handleProvinceClick(provinceId)}
                   />
                 ))}
+                <g className="province-markers">
+  {/* Point Pedro */}
+  <g onClick={() => window.location.href = 'http://localhost:5000/sea-level'} style={{ cursor: 'pointer' }}>
+    <circle cx="120" cy="6.5" r="6" fill="#000000" />
+    <text x="140" y="25" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="bold">Point Pedro</text>
+  </g>
+
+  {/* Colombo */}
+  <g onClick={() => window.location.href = 'http://localhost:5000/sea-level'} style={{ cursor: 'pointer' }}>
+    <circle cx="52" cy="501" r="6" fill="#000000" />
+    <text x="52" y="520" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="bold">Colombo</text>
+  </g>
+
+  {/* Trincomalee */}
+  <g onClick={() => window.location.href = 'http://localhost:5000/sea-level'} style={{ cursor: 'pointer' }}>
+    <circle cx="324" cy="245" r="6" fill="#000000" />
+    <text x="341" y="265" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="bold">Trincomalee</text>
+  </g>
+
+  {/* Mirissa */}
+  <g onClick={() => window.location.href = 'http://localhost:5000/sea-level'} style={{ cursor: 'pointer' }}>
+    <circle cx="124" cy="718" r="6" fill="#000000" />
+    <text x="125" y="739" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="bold">Mirissa</text>
+  </g>
+
+  {/* Hambanthota */}
+  <g onClick={() => window.location.href = 'http://localhost:5000/sea-level'} style={{ cursor: 'pointer' }}>
+    <circle cx="270" cy="710" r="6" fill="#000000" />
+    <text x="270" y="730" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="bold">Hambanthota</text>
+  </g>
+</g>
+
+                  
               </svg>
             </div>
           </div>
+
+        
+
+          
           <CardComponent
             title={selectedCard.title}
             content={selectedCard.content}
             imageUrl={selectedCard.imageUrl}
             buttonLink={selectedCard.buttonLink}
           />
+          
         </div>
       </div>
+
+      <section>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="flex flex-col lg:flex-row justify- items-start gap-8">
+
+            {/* Left - Paragraph */}
+            <div className="lg:w-1/2 space-y-4 bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg shadow-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-4">
+                    <Waves className="text-blue-600 w-8 h-8" />
+                    <h2 className="text-2xl font-bold text-blue-800">Sea Level Variation in Sri Lanka</h2>
+                </div>
+                <p className="text-gray-700 text-justify leading-relaxed">
+                    Sea level variation refers to the short- and long-term fluctuations in ocean water levels caused by astronomical,
+                    meteorological, and hydrological factors specific to a location. These changes can occur over time spans ranging
+                    from just a few minutes to several decades or even centuries. 
+                </p>
+                <p className="text-gray-700 text-justify leading-relaxed">
+                    Along the Sri Lankan coast, sea-level-related events have included meteotsunamis, tsunamis, storm surges, tidal
+                    variations, seasonal patterns, El Niño phenomena, and gradual sea-level rise. Each of these events carries unique
+                    environmental and socio-economic impacts, making regular monitoring crucial for coastal communities.
+                </p>
+                <p className="text-gray-700 text-justify leading-relaxed">
+                    While tidal variations are largely driven by the gravitational pull of the moon and the sun, non-tidal variations
+                    stem from influences like atmospheric pressure changes (inverse barometric effect), strong winds, wave action,
+                    and seismic disturbances. Understanding these dynamics is essential for developing effective coastal protection
+                    and disaster preparedness strategies.
+                </p>
+            </div>
+
+            
+      </div>            
     </div>
+</section>
+<section className="py-12 bg-white-100">
+  
+</section>
+</div>
+
+
+   
   );
+  
+  
 };
 
 export default MapComponent;
