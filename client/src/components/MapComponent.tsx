@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Waves, TrendingUp, MapPin, Calendar, Thermometer, Wind, Droplets, RefreshCw } from "lucide-react";
-import myImage1 from '@/assets/new4.jpg';
+import myImage1 from '@/assets/new5.jpg';
 
 // Define types for the real tide data
 interface TideData {

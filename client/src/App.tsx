@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -20,43 +22,43 @@ import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import UserProfiles from "@/pages/admin/UserProfiles";
 import HistoricalDataVisualize from "@/pages/HistoricalDataVisualize";
-import MapComponent from "@/components/MapComponent"; // Import the MapComponent
+import MapComponent from "@/components/MapComponent";
 
 function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/services" component={Services} />
-      <Route path="/divisions" component={Divisions} />
-      <Route path="/downloads" component={Downloads} />
-      <Route path="/library" component={Library} />
-      <Route path="/mail" component={Mail} />
-      <Route path="/rti" component={RTI} />
-      <Route path="/sea-level" component={SeaLevel} />
-      <Route path="/hdVisualize" component={HistoricalDataVisualize} />
-      <Route path="/contact" component={Contact} />
-      <Route path="/calendar" component={Calendar} />
-      <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin" component={AdminDashboard} />
-      <Route path="/admin/users" component={UserProfiles} />
-      <Route path="/map" component={MapComponent} /> {/* Add the new route for the map */}
-      <Route component={NotFound} />
-    </Switch>
-  );
+    return (
+        <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/about" component={About} />
+            <Route path="/services" component={Services} />
+            <Route path="/divisions" component={Divisions} />
+            <Route path="/downloads" component={Downloads} />
+            <Route path="/library" component={Library} />
+            <Route path="/mail" component={Mail} />
+            <Route path="/rti" component={RTI} />
+            <Route path="/sea-level" component={SeaLevel} />
+            <Route path="/hdVisualize" component={HistoricalDataVisualize} />
+            <Route path="/contact" component={Contact} />
+            <Route path="/calendar" component={Calendar} />
+            <Route path="/admin/login" component={AdminLogin} />
+            <Route path="/admin" component={AdminDashboard} />
+            <Route path="/admin/users" component={UserProfiles} />
+            <Route path="/map" component={MapComponent} />
+            <Route component={NotFound} />
+        </Switch>
+    );
 }
 
 function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Layout>
-          <Router />
-        </Layout>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
+    return (
+        <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+                <Layout>
+                    <Router />
+                </Layout>
+                <Toaster />
+            </TooltipProvider>
+        </QueryClientProvider>
+    );
 }
 
 export default App;
