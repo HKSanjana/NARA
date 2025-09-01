@@ -32,9 +32,9 @@ export default function SeaLevelMonitor() {
   // Available monitoring stations
   const stations = [
     { id: "colo", name: "Colombo Port", location: "Colombo", lat: "6.9344", lon: "79.8428", code: "colo" },
-    { id: "Jaffna", name: "Jaffna", location: "Jaffna", lat: "6.0367", lon: "80.2170", code: "jaff" },
+    //{ id: "Jaffna", name: "Jaffna", location: "Jaffna", lat: "6.0367", lon: "80.2170", code: "jaff" },
     { id: "trin", name: "Trincomalee ", location: "Trincomalee", lat: "8.5874", lon: "81.2152", code: "trin" },
-    { id: "Mirissa", name: "Mirissa", location: "Mirissa", lat: "6.1240", lon: "81.1185", code: "miri" },
+    //{ id: "Mirissa", name: "Mirissa", location: "Mirissa", lat: "6.1240", lon: "81.1185", code: "miri" },
   ];
   
   // Define periods and their corresponding API codes
@@ -128,7 +128,16 @@ export default function SeaLevelMonitor() {
   };
 
   useEffect(() => {
-    const station = stations.find(s => s.id === selectedStation);
+    // Get station from URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const stationParam = params.get('station');
+    
+    // Set the station if it exists in our stations array
+    if (stationParam && stations.some(s => s.id === stationParam)) {
+      setSelectedStation(stationParam);
+    }
+
+    const station = stations.find(s => s.id === (stationParam || selectedStation));
     const period = periods.find(p => p.id === selectedPeriod);
     if (station && period) {
       fetchRealTideData(station.code, period.code);

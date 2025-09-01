@@ -45,6 +45,9 @@ const MapComponent: React.FC = () => {
             window.location.href = 'http://localhost:5000/mirissa-data';
         } else if (pinName === 'Hambanthota') {
             setLocation('/hdVisualize');
+        } else if (pinName === 'Trincomalee') {
+            // Redirect to the external URL for Trincomalee data visualization
+            window.location.href = 'http://localhost:5000/map?station=trin';
         } else {
             // Redirects all other pins to the /map page
             setLocation('/map');
