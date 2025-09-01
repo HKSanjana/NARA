@@ -23,6 +23,8 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import UserProfiles from "@/pages/admin/UserProfiles";
 import HistoricalDataVisualize from "@/pages/HistoricalDataVisualize";
 import MapComponent from "@/components/MapComponent";
+import DataVisualization from './DataVisualization'; // Import the component
+import MirissaData from './MirissaData'; // Import the component
 
 function Router() {
     return (
@@ -43,6 +45,8 @@ function Router() {
             <Route path="/admin" component={AdminDashboard} />
             <Route path="/admin/users" component={UserProfiles} />
             <Route path="/map" component={MapComponent} />
+            <Route path="/data-visualization" component={DataVisualization} />
+            <Route path="/mirissa-data" component={MirissaData} />
             <Route component={NotFound} />
         </Switch>
     );
