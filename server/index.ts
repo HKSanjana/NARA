@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { networkInterfaces } from 'os';
 
 const app = express();
 app.use(express.json());
@@ -62,7 +63,23 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(5000, 'localhost', () => {
-  console.log("Server running on http://localhost:5000");
-});
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on:`);
+    console.log(`- Local:   http://localhost:${port}`);
+    console.log(`- Network: http://${getLocalIpAddress()}:${port}`);
+  });
 })();
+
+function getLocalIpAddress(): string {
+  const nets = networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    const interfaces = nets[name];
+    for (const net of interfaces!) {
+      // Skip internal and non-IPv4 addresses
+      if (!net.internal && net.family === 'IPv4') {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost'; // fallback
+}

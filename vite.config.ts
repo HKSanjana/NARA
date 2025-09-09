@@ -33,6 +33,8 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    host: true, // Add this to listen on all addresses
+    // port: 3000, // Specify port (optional)
   },
   // <-- Added this to handle .xlsx files
   assetsInclude: ["**/*.xlsx"],
