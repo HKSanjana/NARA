@@ -30,7 +30,7 @@ const pins: Pin[] = [
     { id: 3, position: [6.1287, 81.1219], name: 'Hambanthota', description: 'Hambanthota is a coastal city located in the southeastern part of Sri Lanka.' },
     { id: 4, position: [5.9529, 80.4719], name: 'Mirissa', description: 'Mirissa is a small coastal town famous for its pristine beaches and whale watching.' },
     { id: 5, position: [8.5878, 81.2155], name: 'Trincomalee', description: 'Trincomalee is a port city located on the northeast coast of Sri Lanka.' },
-    { id: 6, position: [6.035, 80.217], name: 'Sea Level', description: 'This pin represents a coastal area where sea level monitoring can be conducted.' },
+    //{ id: 6, position: [6.035, 80.217], name: 'Sea Level', description: 'This pin represents a coastal area where sea level monitoring can be conducted.' },
 ];
 
 const MapComponent: React.FC = () => {
@@ -47,7 +47,7 @@ const MapComponent: React.FC = () => {
             setLocation('/hdVisualize');
         } else if (pinName === 'Trincomalee') {
             // Redirect to the external URL for Trincomalee data visualization
-            window.location.href = 'http://localhost:5000/map?station=trin';
+            window.location.href = '/map?station=trin';
         } else {
             // Redirects all other pins to the /map page
             setLocation('/map');
