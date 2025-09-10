@@ -204,13 +204,6 @@ export default function SeaLevelMonitor() {
     }
   };
 
-  // Determine which subset of data to use for the chart
-  const chartDataSubset = useMemo(() => {
-    const period = periods.find(p => p.id === selectedPeriod);
-    const numPoints = period?.chartPoints || 48;
-    return chartData.slice(-numPoints);
-  }, [chartData, selectedPeriod, periods]);
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
@@ -405,11 +398,11 @@ export default function SeaLevelMonitor() {
               <Waves className="w-5 h-5 mr-2 text-blue-600" />
               <h3 className="text-xl font-semibold">Sea Level Trends</h3>
               <span className="ml-4 text-sm text-gray-500">
-                Real-time measurements ({chartDataSubset.length} data points)
+                Real-time measurements ({chartData.length} data points)
               </span>
             </div>
             
-            {chartDataSubset.length > 0 ? (
+            {chartData.length > 0 ? (
               <div className="h-80">
                 <svg viewBox="0 0 800 300" className="w-full h-full">
                   <defs>
@@ -427,8 +420,8 @@ export default function SeaLevelMonitor() {
                   </g>
                   
                   {(() => {
-                    const minVal = Math.min(...chartDataSubset.map(p => p.seaLevel));
-                    const maxVal = Math.max(...chartDataSubset.map(p => p.seaLevel));
+                    const minVal = Math.min(...chartData.map(p => p.seaLevel));
+                    const maxVal = Math.max(...chartData.map(p => p.seaLevel));
                     const range = Math.max(maxVal - minVal, 0.1);
                     const padding = range * 0.1;
                     const adjustedMin = minVal - padding;
@@ -439,8 +432,8 @@ export default function SeaLevelMonitor() {
                       <>
                         {/* Chart area */}
                         <path
-                          d={`M 60 252 ${chartDataSubset.map((d, i) => {
-                            const x = 60 + (i * 680 / Math.max(chartDataSubset.length - 1, 1));
+                          d={`M 60 252 ${chartData.map((d, i) => {
+                            const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
                             const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
                             return `L ${x} ${y}`;
                           }).join(' ')} L 740 252 Z`}
@@ -449,8 +442,8 @@ export default function SeaLevelMonitor() {
                         
                         {/* Chart line */}
                         <path
-                          d={`${chartDataSubset.map((d, i) => {
-                            const x = 60 + (i * 680 / Math.max(chartDataSubset.length - 1, 1));
+                          d={`${chartData.map((d, i) => {
+                            const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
                             const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
                             return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
                           }).join(' ')}`}
@@ -460,8 +453,8 @@ export default function SeaLevelMonitor() {
                         />
                         
                         {/* Data points */}
-                        {chartDataSubset.map((d, i) => {
-                          const x = 60 + (i * 680 / Math.max(chartDataSubset.length - 1, 1));
+                        {chartData.map((d, i) => {
+                          const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
                           const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
                           return (
                             <circle
@@ -496,9 +489,9 @@ export default function SeaLevelMonitor() {
                   })()}
                   
                   {/* X-axis labels with improved spacing */}
-                  {chartDataSubset.filter((_, i) => i % Math.max(Math.floor(chartDataSubset.length / 8), 1) === 0).map((d, i) => {
+                  {chartData.filter((_, i) => i % Math.max(Math.floor(chartData.length / 8), 1) === 0).map((d, i) => {
                     const originalIndex = chartData.indexOf(d); // Use original index for correct x position
-                    const x = 60 + (originalIndex * 680 / Math.max(chartDataSubset.length - 1, 1));
+                    const x = 60 + (originalIndex * 680 / Math.max(chartData.length - 1, 1));
                     
                     let labelText;
                     
@@ -553,7 +546,7 @@ export default function SeaLevelMonitor() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {tideData.slice(0, 20).map((data, index) => (
+                    {tideData.map((data, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{data.time}</td>
                         {tideData[0]?.prs !== undefined && tideData.some(d => d.prs) && (<td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">{data.prs || 'N/A'}</td>)}
