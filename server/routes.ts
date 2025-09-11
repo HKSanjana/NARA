@@ -11,7 +11,7 @@ import { insertUserSchema, insertCalendarEventSchema, insertDocumentSchema, inse
 import fsSync from "fs";
 
 // Define data directory path
-export const DATA_DIR = path.join(process.cwd(), "server/data");
+export const DATA_DIR = path.join(process.cwd(), "client/src/data");
 
 // JWT middleware
 const authenticateToken = (req: any, res: any, next: any) => {
