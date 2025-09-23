@@ -10,7 +10,6 @@ import {
     Tooltip,
     Legend,
 } from "chart.js";
-
 ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -20,7 +19,6 @@ ChartJS.register(
     Tooltip,
     Legend
 );
-
 type ATData = {
     [date: string]: {
         [hour: string]: {
@@ -52,7 +50,6 @@ interface LocationGroup {
 }
 
 const ALL_PARAMETERS = ["AT", "BP", "HU", "RN", "WI", "WL", "WT"];
-
 // Define the available JSON files based on your folder structure
 const JSON_FILES = [
     "AT_0002.json",
@@ -70,14 +67,12 @@ const JSON_FILES = [
     "WT_0002.json",
     "WT_SL01.json"
 ];
-
 const AllChartsViewer: React.FC = () => {
     const API_BASE = "/api/data/files";
     const [files, setFiles] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    // Fetch the list of generated files
+// Fetch the list of generated files
     const fetchFiles = () => {
         setLoading(true);
         fetch(API_BASE)
@@ -89,6 +84,7 @@ const AllChartsViewer: React.FC = () => {
             setError(data.message);
             }
             setLoading(false);
+   
         })
         .catch(() => {
             setError("Failed to fetch files list");
@@ -101,16 +97,13 @@ const AllChartsViewer: React.FC = () => {
         const interval = setInterval(fetchFiles, 20000); // 20 seconds
         return () => clearInterval(interval);
     }, []);
-
-
     const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
     // const [loading, setLoading] = useState(false);
     // const [error, setError] = useState<string | null>(null);
     const [totalCharts, setTotalCharts] = useState(0);
     const [selectedParameters, setSelectedParameters] = useState<string[]>(ALL_PARAMETERS);
     const [allParameterData, setAllParameterData] = useState<ParameterData[]>([]);
-
-    // Helper functions
+// Helper functions
     const getParameterFromFilename = (filename: string): string => {
         if (filename.includes("AT")) return "AT";
         if (filename.includes("BP")) return "BP";
@@ -123,8 +116,8 @@ const AllChartsViewer: React.FC = () => {
     };
 
     const getLocationFromFilename = (filename: string): string => {
-        if (filename.includes("0002")) return "0002";
-        if (filename.includes("SL01")) return "SL01";
+        if (filename.includes("0002")) return "Point Pedro";
+        if (filename.includes("SL01")) return "Mirissa";
         return "Unknown";
     };
 
@@ -140,7 +133,6 @@ const AllChartsViewer: React.FC = () => {
             default: return paramCode;
         }
     };
-
     const getColorForParameter = (paramType: string): string => {
         switch (paramType) {
             case "AT": return "rgba(255,99,132,1)";
@@ -153,14 +145,14 @@ const AllChartsViewer: React.FC = () => {
             default: return "rgba(201,203,207,1)";
         }
     };
-
     const getBackgroundColorForParameter = (paramType: string): string => {
         const borderColor = getColorForParameter(paramType);
         return borderColor.replace("1)", "0.1)");
     };
 
     // Process individual file data
-    const processFileData = (data: any[], filename: string): ParameterData | null => {
+    const processFileData = (data: any[], filename: string): ParameterData |
+null => {
         try {
             const paramType = getParameterFromFilename(filename);
             const location = getLocationFromFilename(filename);
@@ -173,18 +165,15 @@ const AllChartsViewer: React.FC = () => {
             const dateKey = Object.keys(dataObj).find(
                 (k) => k !== "location" && k !== "parameter_type" && k !== "status"
             );
-            
             if (!dateKey) return null;
 
             const hoursObj = dataObj[dateKey] as ATData[string];
             const timePoints: { time: string; value: number }[] = [];
-            
             Object.entries(hoursObj).forEach(([hour, minutesObj]) => {
                 Object.entries(minutesObj).forEach(([minute, value]) => {
                     timePoints.push({ time: `${hour}:${minute}`, value });
                 });
             });
-
             timePoints.sort((a, b) => a.time.localeCompare(b.time));
 
             return {
@@ -201,18 +190,19 @@ const AllChartsViewer: React.FC = () => {
                 location: getLocationFromFilename(filename),
                 timePoints: [],
                 error: `Failed to process ${filename}`
+            
             };
         }
     };
 
     // Fetch data for a single JSON file directly
-    const fetchFileData = async (filename: string): Promise<ParameterData | null> => {
+    const fetchFileData = async (filename: string): Promise<ParameterData |
+null> => {
         try {
             // Try multiple possible paths for the JSON files
             const possiblePaths = [
                 `/src/data/${filename}`,
             ];
-            
             let response;
             let lastError;
             
@@ -235,7 +225,8 @@ const AllChartsViewer: React.FC = () => {
             }
             
             if (!response || !response.ok) {
-                throw lastError || new Error(`All paths failed for ${filename}`);
+                throw lastError ||
+new Error(`All paths failed for ${filename}`);
             }
             
             const contentType = response.headers.get('content-type');
@@ -252,7 +243,8 @@ const AllChartsViewer: React.FC = () => {
                 paramType: getParameterFromFilename(filename),
                 location: getLocationFromFilename(filename),
                 timePoints: [],
-                error: `Failed to fetch ${filename}: ${err instanceof Error ? err.message : 'Unknown error'}`
+                error: `Failed to fetch ${filename}: ${err instanceof Error ?
+err.message : 'Unknown error'}`
             };
         }
     };
@@ -261,13 +253,11 @@ const AllChartsViewer: React.FC = () => {
     const createCombinedChart = (parameters: ParameterData[], location: string, selectedParams: string[]) => {
         // Filter parameters based on selection
         const filteredParameters = parameters.filter(param => selectedParams.includes(param.paramType));
-        
         // Get all unique time points
         const allTimes = new Set<string>();
         filteredParameters.forEach(param => {
             param.timePoints.forEach(point => allTimes.add(point.time));
         });
-        
         const sortedTimes = Array.from(allTimes).sort();
 
         // Create datasets for each selected parameter
@@ -276,23 +266,25 @@ const AllChartsViewer: React.FC = () => {
             .map(param => {
                 // Create data array aligned with time points
                 const dataPoints = sortedTimes.map(time => {
-                    const point = param.timePoints.find(p => p.time === time);
+   
+                     const point = param.timePoints.find(p => p.time === time);
                     return point ? point.value : null;
                 });
 
                 return {
+                  
                     label: getFullParameterName(param.paramType),
                     data: dataPoints,
                     borderColor: getColorForParameter(param.paramType),
                     backgroundColor: getBackgroundColorForParameter(param.paramType),
                     tension: 0.3,
+             
                     pointRadius: 2,
                     pointHoverRadius: 4,
                     fill: false,
                     spanGaps: true
                 };
             });
-
         return {
             labels: sortedTimes,
             datasets
@@ -302,7 +294,6 @@ const AllChartsViewer: React.FC = () => {
     // Group parameters by location and create combined charts
     const groupAndCombineData = (parameterData: ParameterData[], selectedParams: string[]) => {
         const locationMap = new Map<string, ParameterData[]>();
-        
         // Group by location
         parameterData.forEach(param => {
             if (!locationMap.has(param.location)) {
@@ -310,7 +301,6 @@ const AllChartsViewer: React.FC = () => {
             }
             locationMap.get(param.location)!.push(param);
         });
-
         // Create location groups with combined charts
         const groups: LocationGroup[] = Array.from(locationMap.entries()).map(([location, parameters]) => {
             const combinedChart = createCombinedChart(parameters, location, selectedParams);
@@ -318,9 +308,9 @@ const AllChartsViewer: React.FC = () => {
                 location,
                 parameters,
                 combinedChart
+ 
             };
         });
-
         return groups;
     };
 
@@ -331,10 +321,10 @@ const AllChartsViewer: React.FC = () => {
                 return prev.filter(p => p !== paramType);
             } else {
                 return [...prev, paramType];
+       
             }
         });
     };
-
     // Select all parameters
     const selectAllParameters = () => {
         setSelectedParameters(ALL_PARAMETERS);
@@ -368,7 +358,6 @@ const AllChartsViewer: React.FC = () => {
             }
 
             console.log(`Processed ${validResults.length} JSON files`);
-            
         } catch (err) {
             console.error("Error fetching data:", err);
             setError("Failed to fetch and process JSON files");
@@ -384,7 +373,6 @@ const AllChartsViewer: React.FC = () => {
             setLocationGroups(groups);
         }
     }, [allParameterData, selectedParameters]);
-
     // Chart options
     const getChartOptions = (location: string) => ({
         responsive: true,
@@ -392,30 +380,35 @@ const AllChartsViewer: React.FC = () => {
         plugins: {
             title: {
                 display: true,
-                text: `Selected Parameters - Location ${location}`,
+                text: `Selected Parameters - ${location}`,
+          
                 font: {
                     size: 16,
                     weight: 'bold'
                 }
             },
             legend: {
+          
                 position: 'top' as const,
                 labels: {
                     boxWidth: 15,
                     padding: 15,
                     font: {
+           
                         size: 12
                     }
                 }
             },
             tooltip: {
                 mode: 'index' as const,
+      
                 intersect: false,
                 backgroundColor: 'rgba(0,0,0,0.8)',
                 titleColor: 'white',
                 bodyColor: 'white',
                 borderColor: 'rgba(255,255,255,0.2)',
                 borderWidth: 1
+    
             }
         },
         scales: {
@@ -423,17 +416,20 @@ const AllChartsViewer: React.FC = () => {
                 display: true,
                 title: {
                     display: true,
+       
                     text: 'Time'
                 },
                 grid: {
                     color: 'rgba(0,0,0,0.1)'
                 }
             },
+    
             y: {
                 display: true,
                 title: {
                     display: true,
                     text: 'Values'
+               
                 },
                 grid: {
                     color: 'rgba(0,0,0,0.1)'
@@ -442,11 +438,11 @@ const AllChartsViewer: React.FC = () => {
         },
         interaction: {
             mode: 'nearest' as const,
+ 
             axis: 'x' as const,
             intersect: false
         }
     });
-
     useEffect(() => {
         fetchAllData();
         
@@ -454,121 +450,146 @@ const AllChartsViewer: React.FC = () => {
         const interval = setInterval(fetchAllData, 30000);
         return () => clearInterval(interval);
     }, []);
-
     return (
         <div className="all-charts-container">
             <div className="header">
                 <h1>Real-time Environmental Monitoring Dashboard</h1>
                 <div className="header-info">
                     <div className="status-info">
+                    
                         <div className="status-item">
                             <strong>Available Parameters:</strong> {ALL_PARAMETERS.join(', ')}
                         </div>
                         <div className="status-item">
+               
                             <strong>Selected Parameters:</strong> {selectedParameters.length > 0 ? selectedParameters.join(', ') : 'None'}
-                        </div>
-                        <div className="status-item">
-                            <strong>JSON Files:</strong> {JSON_FILES.length}
-                        </div>
-                        <div className="status-item">
-                            <strong>Processed Data Files:</strong> {totalCharts}
                         </div>
                         <div className="status-item">
                             <strong>Locations:</strong> {locationGroups.map(g => g.location).join(', ')}
                         </div>
+              
                     </div>
                     <button onClick={fetchAllData} disabled={loading} className="refresh-btn">
-                        {loading ? "Loading..." : "Refresh All Data"}
+                        {loading ?
+"Loading..." : "Refresh All Data"}
                     </button>
                 </div>
             </div>
 
             {/* Parameter Selection Panel */}
             <div className="parameter-selection-panel">
-                <h2>Select Parameters to Display</h2>
+                <h2>Select Parameters to 
+Display</h2>
                 <div className="selection-controls">
                     <button onClick={selectAllParameters} className="control-btn select-all">
                         Select All
                     </button>
+               
                     <button onClick={clearAllParameters} className="control-btn clear-all">
                         Clear All
                     </button>
                     <span className="selection-count">
-                        ({selectedParameters.length} of {ALL_PARAMETERS.length} selected)
+                        ({selectedParameters.length} of 
+{ALL_PARAMETERS.length} selected)
                     </span>
                 </div>
                 <div className="parameter-checkboxes">
                     {ALL_PARAMETERS.map(param => (
+                        
                         <label key={param} className="parameter-checkbox">
                             <input
                                 type="checkbox"
                                 checked={selectedParameters.includes(param)}
+      
                                 onChange={() => handleParameterChange(param)}
                             />
                             <span 
+               
                                 className="checkbox-custom" 
                                 style={{ borderColor: getColorForParameter(param) }}
                             >
+                   
                                 <span 
                                     className="checkbox-indicator"
                                     style={{ backgroundColor: getColorForParameter(param) }}
+           
                                 ></span>
                             </span>
                             <span className="parameter-name" style={{ color: getColorForParameter(param) }}>
+                  
                                 {getFullParameterName(param)} ({param})
                             </span>
                         </label>
                     ))}
+             
                 </div>
             </div>
             
             {error && <div className="error-message">{error}</div>}
             
             <div className="charts-container">
-                {loading ? (
+                {loading ?
+(
                     <div className="loading-message">
                         <div className="loading-spinner"></div>
                        <h3>Loading JSON Files Simultaneously...</h3>
-                        <p>Processing {JSON_FILES.length} JSON files for all parameters</p>
+                        <p>Processing {JSON_FILES.length} JSON files 
+for all parameters</p>
                     </div>
-                ) : selectedParameters.length === 0 ? (
+                ) : selectedParameters.length === 0 ?
+(
                     <div className="no-selection-message">
                         <h3>No Parameters Selected</h3>
                         <p>Please select at least one parameter to display charts.</p>
                     </div>
-                ) : locationGroups.length === 0 ? (
+ 
+                ) : locationGroups.length === 0 ?
+(
                     <div className="no-data-message">
                         <h3>No Data Available</h3>
                         <p>No valid data found for selected parameters: {selectedParameters.join(', ')}</p>
+                     
                         <p>Make sure JSON files are available in the ./data/ folder</p>
                     </div>
                 ) : (
                     <div className="charts-grid">
                         {locationGroups.map((group) => {
+   
                             const selectedParamsForLocation = group.parameters.filter(p => selectedParameters.includes(p.paramType));
                             return (
                                 <div key={group.location} className="chart-section">
+       
                                     <div className="chart-wrapper">
                                         <Line 
+                             
                                             data={group.combinedChart} 
                                             options={getChartOptions(group.location)}
-                                        />
+                                        
+/>
                                     </div>
                                     <div className="chart-details">
+                           
                                         <h4>Location {group.location} - Selected Parameters Summary</h4>
                                         <div className="parameter-list">
+                                         
                                             {selectedParamsForLocation.map(param => (
                                                 <div key={param.filename} className="parameter-item">
+                                             
                                                     <span className="param-name" style={{color: getColorForParameter(param.paramType)}}>
                                                         ● {getFullParameterName(param.paramType)}
+                                 
                                                     </span>
                                                     <span className="param-points">
+                            
                                                         ({param.timePoints.length} data points)
                                                     </span>
+                  
                                                     {param.error && <span className="param-error">Error: {param.error}</span>}
                                                 </div>
+              
                                             ))}
                                         </div>
+                              
                                     </div>
                                 </div>
                             );
@@ -784,8 +805,10 @@ const AllChartsViewer: React.FC = () => {
                 }
 
                 @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
+                    0% { transform: rotate(0deg);
+}
+                    100% { transform: rotate(360deg);
+}
                 }
 
                 .loading-message h3, .no-data-message h3, .no-selection-message h3 {
@@ -887,21 +910,21 @@ const AllChartsViewer: React.FC = () => {
                 @media (max-width: 1200px) {
                     .charts-grid {
                         grid-template-columns: 1fr;
-                    }
+}
                 }
 
                 @media (max-width: 768px) {
                     .all-charts-container {
                         padding: 10px;
-                    }
+}
                     
                     .header {
                         padding: 20px;
-                    }
+}
                     
                     .header h1 {
                         font-size: 1.5em;
-                    }
+}
                     
                     .header-info {
                         flex-direction: column;
@@ -910,31 +933,31 @@ const AllChartsViewer: React.FC = () => {
                     
                     .status-info {
                         grid-template-columns: 1fr;
-                    }
+}
                     
                     .parameter-selection-panel {
                         padding: 20px;
-                    }
+}
                     
                     .parameter-checkboxes {
                         grid-template-columns: 1fr;
-                    }
+}
                     
                     .selection-controls {
                         justify-content: center;
-                    }
+}
                     
                     .chart-section {
                         padding: 20px;
-                    }
+}
                     
                     .chart-wrapper {
                         height: 400px;
-                    }
+}
                     
                     .parameter-list {
                         grid-template-columns: 1fr;
-                    }
+}
                 }
             `}</style>
         </div>

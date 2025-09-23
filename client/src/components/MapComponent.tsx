@@ -18,10 +18,19 @@ interface ChartDataPoint {
   time: string;
   seaLevel: number;
   pressure: number;
-  battery: number;
+  radar: number;
+  radar2: number;
 }
 
 export default function SeaLevelMonitor() {
+  // Add new state for visible series
+  const [visibleSeries, setVisibleSeries] = useState({
+    seaLevel: true,
+    pressure: false,
+    radar: false,
+    radar2: false
+  });
+  
   const [selectedStation, setSelectedStation] = useState("colo");
   const [selectedPeriod, setSelectedPeriod] = useState("1hr");
   const [tideData, setTideData] = useState<TideData[]>([]);
@@ -101,20 +110,39 @@ export default function SeaLevelMonitor() {
       setTideData(extractedData.filter(d => d.time.trim() !== ''));
       
       const chartPoints: ChartDataPoint[] = extractedData
-        .filter(d => (d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs))) || (d.enc && d.enc !== '' && !isNaN(parseFloat(d.enc))))
+        .filter(d => d.time.trim() !== '')
         .map(d => {
-          const seaLevelValue = d.prs && d.prs !== '' ? parseFloat(d.prs) : (d.enc && d.enc !== '' ? parseFloat(d.enc) : 0);
-          const pressureValue = d.ra2 && d.ra2 !== '' ? parseFloat(d.ra2) : 0;
-          const batteryValue = d.bat && d.bat !== '' ? parseFloat(d.bat) : 0;
+          // Sea level from pressure sensor
+          const seaLevelValue = d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs)) ? 
+                               parseFloat(d.prs) : 0;
           
+          // Atmospheric pressure
+          const pressureValue = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ? 
+                               parseFloat(d.ra2) : 0;
+          
+          // Primary radar measurement (rad)
+          const radarValue = d.rad && d.rad !== '' && !isNaN(parseFloat(d.rad)) ? 
+                            parseFloat(d.rad) : 0;
+          
+          // Second radar measurement (ra2)
+          const radar2Value = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ? 
+                             parseFloat(d.ra2) : 0;
+
           return {
             time: d.time,
-            seaLevel: seaLevelValue,
-            pressure: pressureValue,
-            battery: batteryValue
+            seaLevel: Number(seaLevelValue.toFixed(3)),
+            pressure: Number(pressureValue.toFixed(3)),
+            radar: Number(radarValue.toFixed(3)),
+            radar2: Number(radar2Value.toFixed(3))
           };
-        });
-      
+        })
+        .filter(point => 
+          point.seaLevel !== 0 || 
+          point.pressure !== 0 || 
+          point.radar !== 0 || 
+          point.radar2 !== 0
+        );
+
       setChartData(chartPoints);
       setLastUpdated(new Date().toLocaleString());
       
@@ -394,126 +422,274 @@ export default function SeaLevelMonitor() {
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <div className="flex items-center mb-6">
-              <Waves className="w-5 h-5 mr-2 text-blue-600" />
-              <h3 className="text-xl font-semibold">Sea Level Trends</h3>
-              <span className="ml-4 text-sm text-gray-500">
-                Real-time measurements ({chartData.length} data points)
-              </span>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Waves className="w-5 h-5 mr-2 text-blue-600" />
+                <h3 className="text-xl font-semibold">Data Trends</h3>
+              </div>
+              
+              {/* Add series toggles */}
+              <div className="flex gap-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={visibleSeries.seaLevel}
+                    onChange={e => setVisibleSeries({...visibleSeries, seaLevel: e.target.checked})}
+                    className="rounded text-blue-600"
+                  />
+                  <span className="text-sm">Sea Level</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={visibleSeries.pressure}
+                    onChange={e => setVisibleSeries({...visibleSeries, pressure: e.target.checked})}
+                    className="rounded text-red-600"
+                  />
+                  <span className="text-sm">Pressure</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={visibleSeries.radar}
+                    onChange={e => setVisibleSeries({...visibleSeries, radar: e.target.checked})}
+                    className="rounded text-green-600"
+                  />
+                  <span className="text-sm">Radar</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={visibleSeries.radar2}
+                    onChange={e => setVisibleSeries({...visibleSeries, radar2: e.target.checked})}
+                    className="rounded text-purple-600"
+                  />
+                  <span className="text-sm">Radar 2 (ra2)</span>
+                </label>
+              </div>
             </div>
-            
+
             {chartData.length > 0 ? (
               <div className="h-80">
                 <svg viewBox="0 0 800 300" className="w-full h-full">
-                  <defs>
-                    <linearGradient id="seaLevelGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" style={{stopColor: '#3B82F6', stopOpacity: 0.8}} />
-                      <stop offset="100%" style={{stopColor: '#3B82F6', stopOpacity: 0.1}} />
-                    </linearGradient>
-                  </defs>
-                  
                   {/* Grid lines */}
                   <g stroke="#E5E7EB" strokeWidth="1" opacity="0.5">
                     {[0, 1, 2, 3, 4].map(i => (
-                      <line key={i} x1="60" y1={60 + i * 48} x2="740" y2={60 + i * 48} />
+                      <line key={i} x1="90" y1={60 + i * 48} x2="740" y2={60 + i * 48} />
                     ))}
                   </g>
-                  
+
+                  {/* X-axis line */}
+                  <line x1="90" y1="252" x2="740" y2="252" stroke="#374151" strokeWidth="1" />
+
                   {(() => {
-                    const minVal = Math.min(...chartData.map(p => p.seaLevel));
-                    const maxVal = Math.max(...chartData.map(p => p.seaLevel));
-                    const range = Math.max(maxVal - minVal, 0.1);
-                    const padding = range * 0.1;
-                    const adjustedMin = minVal - padding;
-                    const adjustedMax = maxVal + padding;
-                    const adjustedRange = adjustedMax - adjustedMin;
-                    
+                    // Calculate ranges for each series
+                    const getRange = (data: number[]) => {
+                      const validData = data.filter(val => val !== 0);
+                      if (validData.length === 0) return { min: 0, max: 1, range: 1 };
+                      
+                      const min = Math.min(...validData);
+                      const max = Math.max(...validData);
+                      const range = Math.max(max - min, 0.1);
+                      const padding = range * 0.1;
+                      return {
+                        min: min - padding,
+                        max: max + padding,
+                        range: (max - min) + (2 * padding)
+                      };
+                    };
+
+                    const ranges = {
+                      seaLevel: getRange(chartData.map(d => d.seaLevel)),
+                      pressure: getRange(chartData.map(d => d.pressure)),
+                      radar: getRange(chartData.map(d => d.radar)),
+                      radar2: getRange(chartData.map(d => d.radar2))
+                    };
+
                     return (
                       <>
-                        {/* Chart area */}
-                        <path
-                          d={`M 60 252 ${chartData.map((d, i) => {
-                            const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
-                            const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
-                            return `L ${x} ${y}`;
-                          }).join(' ')} L 740 252 Z`}
-                          fill="url(#seaLevelGradient)"
-                        />
-                        
-                        {/* Chart line */}
-                        <path
-                          d={`${chartData.map((d, i) => {
-                            const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
-                            const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
-                            return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
-                          }).join(' ')}`}
-                          fill="none"
-                          stroke="#3B82F6"
-                          strokeWidth="3"
-                        />
-                        
-                        {/* Data points */}
-                        {chartData.map((d, i) => {
-                          const x = 60 + (i * 680 / Math.max(chartData.length - 1, 1));
-                          const y = 252 - ((d.seaLevel - adjustedMin) / adjustedRange) * 192;
-                          return (
-                            <circle
-                              key={i}
-                              cx={x}
-                              cy={y}
-                              r="3"
-                              fill="#3B82F6"
-                              stroke="white"
-                              strokeWidth="2"
-                            />
-                          );
-                        })}
-                        
                         {/* Y-axis labels */}
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const value = adjustedMin + (adjustedRange * i / 4);
+                        {Object.entries(ranges).map(([key, range], idx) => {
+                          if (!visibleSeries[key as keyof typeof visibleSeries]) return null;
+                          const color = {
+                            seaLevel: '#2563EB',
+                            pressure: '#DC2626',
+                            radar: '#059669',
+                            radar2: '#7C3AED'
+                          }[key];
+                          
+                          const label = {
+                            seaLevel: 'Sea Level (m)',
+                            pressure: 'Pressure (hPa)',
+                            radar: 'Radar (m)',
+                            radar2: 'Radar 2 (m)'  // Updated label
+                          }[key];
+
                           return (
-                            <text
-                              key={i}
-                              x="45"
-                              y={256 - i * 48}
-                              textAnchor="end"
-                              className="text-xs fill-gray-600"
-                            >
-                              {value.toFixed(2)}m
-                            </text>
+                            <g key={key}>
+                              {/* Y-axis title */}
+                              <text
+                                x={45 - (idx * 40)}
+                                y="150"
+                                textAnchor="middle"
+                                transform={`rotate(-90, ${45 - (idx * 40)}, 150)`}
+                                className="text-xs fill-gray-400"
+                                style={{ fontSize: '0.7rem' }}
+                              >
+                                {label}
+                              </text>
+                              {/* Y-axis values */}
+                              {[0, 1, 2, 3, 4].map(i => (
+                                <text
+                                  key={i}
+                                  x={85 - (idx * 40)}
+                                  y={256 - i * 48}
+                                  textAnchor="end"
+                                  className="text-xs"
+                                  fill={color}
+                                  style={{ fontSize: '0.65rem' }}
+                                >
+                                  {(range.min + (range.range * i / 4)).toFixed(2)}
+                                </text>
+                              ))}
+                            </g>
                           );
                         })}
+
+                        {/* Data series */}
+                        {visibleSeries.seaLevel && (
+                          <g>
+                            {chartData.map((d, i) => {
+                              const x = 90 + (i * 650 / (chartData.length - 1));
+                              const y = 252 - ((d.seaLevel - ranges.seaLevel.min) / ranges.seaLevel.range * 192);
+                              return (
+                                <circle
+                                  key={`seaLevel-${i}`}
+                                  cx={x}
+                                  cy={y}
+                                  r="2.5"  // Smaller radius
+                                  fill="#2563EB"
+                                  stroke="white"
+                                  strokeWidth="1"  // Thinner stroke
+                                />
+                              );
+                            })}
+                          </g>
+                        )}
+
+                        {visibleSeries.pressure && chartData.some(d => d.pressure !== 0) && (
+                          <g>
+                            {chartData.map((d, i) => {
+                              const x = 90 + (i * 650 / (chartData.length - 1));
+                              const y = 252 - ((d.pressure - ranges.pressure.min) / ranges.pressure.range * 192);
+                              return d.pressure !== 0 ? (
+                                <circle
+                                  key={`pressure-${i}`}
+                                  cx={x}
+                                  cy={y}
+                                  r="2.5"  // Smaller radius
+                                  fill="#DC2626"
+                                  stroke="white"
+                                  strokeWidth="1"  // Thinner stroke
+                                />
+                              ) : null;
+                            })}
+                          </g>
+                        )}
+
+                        {visibleSeries.radar && chartData.some(d => d.radar !== 0) && (
+                          <g>
+                            {chartData.map((d, i) => {
+                              const x = 90 + (i * 650 / (chartData.length - 1));
+                              const y = 252 - ((d.radar - ranges.radar.min) / ranges.radar.range * 192);
+                              return d.radar !== 0 ? (
+                                <circle
+                                  key={`radar-${i}`}
+                                  cx={x}
+                                  cy={y}
+                                  r="2.5"  // Smaller radius
+                                  fill="#059669"
+                                  stroke="white"
+                                  strokeWidth="1"  // Thinner stroke
+                                />
+                              ) : null;
+                            })}
+                          </g>
+                        )}
+
+                        {visibleSeries.radar2 && chartData.some(d => d.radar2 !== 0) && (
+                          <g>
+                            {chartData.map((d, i) => {
+                              const x = 90 + (i * 650 / (chartData.length - 1));
+                              const y = 252 - ((d.radar2 - ranges.radar2.min) / ranges.radar2.range * 192);
+                              return d.radar2 !== 0 ? (
+                                <circle
+                                  key={`radar2-${i}`}
+                                  cx={x}
+                                  cy={y}
+                                  r="2.5"  // Smaller radius
+                                  fill="#7C3AED"
+                                  stroke="white"
+                                  strokeWidth="1"  // Thinner stroke
+                                />
+                              ) : null;
+                            })}
+                          </g>
+                        )}
+
+                        {/* X-axis labels */}
+                        {chartData.filter((_, i) => i % Math.max(Math.floor(chartData.length / 8), 1) === 0)
+                          .map((d, i) => {
+                            const originalIndex = chartData.indexOf(d);
+                            const x = 90 + (originalIndex * 650 / Math.max(chartData.length - 1, 1));
+                            
+                            return (
+                              <g key={i}>
+                                {/* Tick mark */}
+                                <line
+                                  x1={x}
+                                  y1="252"
+                                  x2={x}
+                                  y2="257"
+                                  stroke="#374151"
+                                  strokeWidth="1"
+                                />
+                                {/* Label */}
+                                <text
+                                  x={x}
+                                  y="275"
+                                  textAnchor="middle"
+                                  className="text-xs fill-gray-600 font-medium"
+                                  transform={selectedPeriod === "month" ? `rotate(45, ${x}, 275)` : undefined}
+                                >
+                                  {selectedPeriod === "1hr" || selectedPeriod === "day" 
+                                    ? d.time.substring(d.time.length - 5) 
+                                    : d.time.split(' ')[0]}
+                                </text>
+                              </g>
+                            );
+                        })}
+
+                        {/* X-axis label with background */}
+                        <rect
+                          x="350"
+                          y="285"
+                          width="100"
+                          height="20"
+                          fill="white"
+                          rx="4"
+                        />
+                        <text
+                          x="400"
+                          y="298"
+                          textAnchor="middle"
+                          className="text-sm fill-gray-600 font-semibold"
+                        >
+                          {selectedPeriod === "1hr" || selectedPeriod === "day" ? "Time (HH:MM)" : "Date"}
+                        </text>
                       </>
                     );
                   })()}
-                  
-                  {/* X-axis labels with improved spacing */}
-                  {chartData.filter((_, i) => i % Math.max(Math.floor(chartData.length / 8), 1) === 0).map((d, i) => {
-                    const originalIndex = chartData.indexOf(d); // Use original index for correct x position
-                    const x = 60 + (originalIndex * 680 / Math.max(chartData.length - 1, 1));
-                    
-                    let labelText;
-                    
-                    if (selectedPeriod === "1hr" || selectedPeriod === "day") {
-                      labelText = d.time.substring(d.time.length - 5);
-                    } else {
-                      const dateParts = d.time.split(' ');
-                      labelText = dateParts[0];
-                    }
-                    
-                    return (
-                      <text
-                        key={i}
-                        x={x}
-                        y="275"
-                        textAnchor="middle"
-                        className="text-xs fill-gray-600"
-                      >
-                        {labelText}
-                      </text>
-                    );
-                  })}
                 </svg>
               </div>
             ) : (
