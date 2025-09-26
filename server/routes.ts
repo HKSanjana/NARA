@@ -92,11 +92,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save received data
       await fs.writeFile(path.join(DATA_DIR, "received_data.json"), JSON.stringify(data, null, 2));
 
+      // New processing logic: Create Cartesian product of parameter types and locations
+      interface DataEntry {
+        parameter_type?: string;
+        location?: string;
+        status?: string;
+        [key: string]: any;
+      }
+      
+      const parameterTypes: string[] = Array.from(new Set(data.map((entry: DataEntry) => entry.parameter_type).filter(Boolean)));
+      interface DataItem {
+        parameter_type?: string;
+        location?: string;
+        status?: string;
+        [key: string]: any;
+      }
+      
+      const locations: string[] = Array.from(new Set(data.map((entry: DataItem) => entry.location).filter(Boolean)));
+
+      const generatedFiles = [];
+      let totalProcessedEntries = 0;
+
+      for (const paramType of parameterTypes) {
+        for (const location of locations) {
+            interface DataEntry {
+            parameter_type?: string;
+            location?: string;
+            status?: string;
+            [key: string]: any;
+            }
+            
+            const filteredData: DataEntry[] = data.filter((entry: DataEntry) => 
+            entry.parameter_type === paramType && entry.location === location
+            );
+          if (filteredData.length > 0) {
+            const filename = `${paramType}_${location}.json`;
+            await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
+            generatedFiles.push(filename);
+            totalProcessedEntries += filteredData.length;
+          }
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: "Data received and processed successfully",
         timestamp: new Date().toISOString(),
         data_count: Array.isArray(data) ? data.length : 1,
+        generated_files: generatedFiles,
+        total_processed_entries: totalProcessedEntries,
       });
     } catch (error: any) {
       console.error('Process data error:', error);
@@ -104,67 +148,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: 'Failed to process data',
         error: error.message
-      });
-    }
-  });
-
-  app.get("/api/data/files", async (req, res) => {
-    try {
-      let storedData = null;
-      const receivedPath = path.join(DATA_DIR, "received_data.json");
-      
-      try {
-        const dataBuffer = await fs.readFile(receivedPath);
-        if (dataBuffer.length > 0) {
-          storedData = JSON.parse(dataBuffer.toString());
-        }
-      } catch (fileError) {
-        console.error("Error reading received_data.json:", fileError);
-        storedData = null;
-      }
-
-      const allData = storedData || [];
-      const parameter_types = ["AT", "BP", "HU", "RN", "WI", "WL", "WT"];
-      const locations = ["0002", "SL01"];
-      
-      interface DataEntry {
-        parameter_type: string;
-        location: string;
-        status?: string;
-        [key: string]: any;
-      }
-      
-      const generatedFiles: string[] = [];
-      let totalEntriesProcessed = 0;
-
-      for (const paramType of parameter_types) {
-        for (const location of locations) {
-          const filteredData: DataEntry[] = allData.filter(
-            (entry: DataEntry) => entry.parameter_type === paramType && entry.location === location
-          );
-          
-          if (filteredData.length > 0) {
-            const filename = `${paramType}_${location}.json`;
-            await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
-            generatedFiles.push(filename);
-            totalEntriesProcessed += filteredData.length;
-          }
-        }
-      }
-
-      res.status(200).json({
-        success: true,
-        message: "Data processed and individual JSON files generated successfully.",
-        generated_files: generatedFiles,
-        total_entries_processed: totalEntriesProcessed,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: any) {
-      console.error('Process data files error:', error);
-      res.status(500).json({
-        success: false,
-        message: "Error retrieving data",
-        error: error.message,
       });
     }
   });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import {
     Chart as ChartJS,
@@ -10,6 +10,7 @@ import {
     Tooltip,
     Legend,
 } from "chart.js";
+
 ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -19,28 +20,30 @@ ChartJS.register(
     Tooltip,
     Legend
 );
-type ATData = {
+
+type HourlyData = {
     [date: string]: {
-        [hour: string]: {
-            [minute: string]: number;
-        };
+        [hour: string]: number[];
     };
 };
 
-interface ApiResponse {
-  success: boolean;
-  message: string;
-  generated_files: string[];
-  total_entries_processed: number;
-  timestamp: string;
+interface JsonDataStructure {
+    [date: string]: {
+        [hour: string]: { [minuteIndex: string]: number }; // Corrected for the 'minuteIndex': value structure
+    } | any; // Added 'any' to allow for metadata fields
+    location?: string;
+    parameter_type?: string;
+    status?: string;
 }
 
 interface ParameterData {
     filename: string;
     paramType: string;
     location: string;
-    timePoints: { time: string; value: number }[];
+    timePoints: { time: string; value: number; date: string }[];
+    dates: string[];
     error?: string;
+    rawData?: JsonDataStructure;
 }
 
 interface LocationGroup {
@@ -50,6 +53,8 @@ interface LocationGroup {
 }
 
 const ALL_PARAMETERS = ["AT", "BP", "HU", "RN", "WI", "WL", "WT"];
+const ALL_LOCATIONS = ["0002", "SL01"];
+
 // Define the available JSON files based on your folder structure
 const JSON_FILES = [
     "AT_0002.json",
@@ -67,43 +72,27 @@ const JSON_FILES = [
     "WT_0002.json",
     "WT_SL01.json"
 ];
+
 const AllChartsViewer: React.FC = () => {
-    const API_BASE = "/api/data/files";
-    const [files, setFiles] = useState<string[]>([]);
+    const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-// Fetch the list of generated files
-    const fetchFiles = () => {
-        setLoading(true);
-        fetch(API_BASE)
-        .then((res) => res.json())
-        .then((data: ApiResponse) => {
-            if (data.success) {
-            setFiles(data.generated_files);
-            } else {
-            setError(data.message);
-            }
-            setLoading(false);
-   
-        })
-        .catch(() => {
-            setError("Failed to fetch files list");
-            setLoading(false);
-        });
-    };
-
-    useEffect(() => {
-        fetchFiles();
-        const interval = setInterval(fetchFiles, 20000); // 20 seconds
-        return () => clearInterval(interval);
-    }, []);
-    const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
-    // const [loading, setLoading] = useState(false);
-    // const [error, setError] = useState<string | null>(null);
     const [totalCharts, setTotalCharts] = useState(0);
     const [selectedParameters, setSelectedParameters] = useState<string[]>(ALL_PARAMETERS);
     const [allParameterData, setAllParameterData] = useState<ParameterData[]>([]);
-// Helper functions
+    const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+    const [availableLocations, setAvailableLocations] = useState<string[]>([]);
+
+    // Get URL parameters
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const locParam = urlParams.get('loc');
+        if (locParam && ALL_LOCATIONS.includes(locParam)) {
+            setSelectedLocation(locParam);
+        }
+    }, []);
+
+    // Helper functions
     const getParameterFromFilename = (filename: string): string => {
         if (filename.includes("AT")) return "AT";
         if (filename.includes("BP")) return "BP";
@@ -116,8 +105,8 @@ const AllChartsViewer: React.FC = () => {
     };
 
     const getLocationFromFilename = (filename: string): string => {
-        if (filename.includes("0002")) return "Point Pedro";
-        if (filename.includes("SL01")) return "Mirissa";
+        if (filename.includes("0002")) return "0002";
+        if (filename.includes("SL01")) return "SL01";
         return "Unknown";
     };
 
@@ -133,6 +122,7 @@ const AllChartsViewer: React.FC = () => {
             default: return paramCode;
         }
     };
+
     const getColorForParameter = (paramType: string): string => {
         switch (paramType) {
             case "AT": return "rgba(255,99,132,1)";
@@ -145,14 +135,14 @@ const AllChartsViewer: React.FC = () => {
             default: return "rgba(201,203,207,1)";
         }
     };
+
     const getBackgroundColorForParameter = (paramType: string): string => {
         const borderColor = getColorForParameter(paramType);
         return borderColor.replace("1)", "0.1)");
     };
 
-    // Process individual file data
-    const processFileData = (data: any[], filename: string): ParameterData |
-null => {
+    // Process individual file data with the new JSON structure
+    const processFileData = (data: JsonDataStructure[], filename: string): ParameterData | null => {
         try {
             const paramType = getParameterFromFilename(filename);
             const location = getLocationFromFilename(filename);
@@ -161,48 +151,80 @@ null => {
                 return null;
             }
 
-            const dataObj = data[0];
-            const dateKey = Object.keys(dataObj).find(
-                (k) => k !== "location" && k !== "parameter_type" && k !== "status"
-            );
-            if (!dateKey) return null;
+            // Data is an array containing a single object with all the data
+            const dataObj = data[0] as unknown as JsonDataStructure; 
+            
+            // Separate metadata fields (if they exist) from the date/hour data
+            const dateHourData = { ...dataObj };
+            delete dateHourData.location;
+            delete dateHourData.parameter_type;
+            delete dateHourData.status;
 
-            const hoursObj = dataObj[dateKey] as ATData[string];
-            const timePoints: { time: string; value: number }[] = [];
-            Object.entries(hoursObj).forEach(([hour, minutesObj]) => {
-                Object.entries(minutesObj).forEach(([minute, value]) => {
-                    timePoints.push({ time: `${hour}:${minute}`, value });
-                });
+            // Extract dates (keys that look like dates)
+            const dates = Object.keys(dateHourData).filter(key => key.match(/^\d{4}-\d{2}-\d{2}$/));
+            const timePoints: { time: string; value: number; date: string }[] = [];
+            
+            // Process each date
+            dates.forEach(date => {
+                const hoursData = dateHourData[date];
+                if (hoursData) {
+                    Object.entries(hoursData).forEach(([hour, valuesObject]) => {
+                        // valuesObject is { "minuteIndex": value } based on AT_0002.json structure
+                        if (typeof valuesObject === 'object' && valuesObject !== null) {
+                            
+                            // Assuming keys '0', '2', '4', ..., '118' correspond to minutes 0, 1, 2, ..., 59
+                            Object.entries(valuesObject).forEach(([minuteIndexStr, value]) => {
+                                const minuteRaw = parseInt(minuteIndexStr);
+                                
+                                // Calculate the minute: '0' -> 0, '2' -> 1, '4' -> 2, ..., '118' -> 59
+                                const minute = String(minuteRaw / 2).padStart(2, '0');
+                                
+                                // Format the hour part: '20H00' -> '20'
+                                const hourStr = hour.replace('H00', '').padStart(2, '0'); 
+                                const timeStr = `${hourStr}:${minute}`;
+                                
+                                // Filter out invalid values
+                                if (typeof value === 'number' && !isNaN(value)) {
+                                    timePoints.push({
+                                        time: timeStr,
+                                        value: value,
+                                        date: date
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
             });
-            timePoints.sort((a, b) => a.time.localeCompare(b.time));
 
-            return {
-                filename,
-                paramType,
-                location,
-                timePoints
-            };
+            // Sort by date and time
+            timePoints.sort((a, b) => {
+                if (a.date === b.date) {
+                    return a.time.localeCompare(b.time);
+                }
+                return a.date.localeCompare(b.date);
+            });
+            
+            const detectedLocation = dataObj.location || location;
+
+            return { filename, paramType, location: detectedLocation, timePoints, dates, rawData: dataObj };
         } catch (err) {
             console.error(`Error processing ${filename}:`, err);
-            return {
-                filename,
-                paramType: getParameterFromFilename(filename),
-                location: getLocationFromFilename(filename),
-                timePoints: [],
-                error: `Failed to process ${filename}`
-            
-            };
+            return { filename, paramType: getParameterFromFilename(filename), location: getLocationFromFilename(filename), timePoints: [], dates: [], error: `Failed to process ${filename}: ${err instanceof Error ? err.message : 'Unknown error'}` };
         }
     };
 
     // Fetch data for a single JSON file directly
-    const fetchFileData = async (filename: string): Promise<ParameterData |
-null> => {
+    const fetchFileData = async (filename: string): Promise<ParameterData | null> => {
         try {
             // Try multiple possible paths for the JSON files
             const possiblePaths = [
                 `/src/data/${filename}`,
+                `/data/${filename}`,
+                `./${filename}`,
+                `/public/data/${filename}`
             ];
+            
             let response;
             let lastError;
             
@@ -225,8 +247,7 @@ null> => {
             }
             
             if (!response || !response.ok) {
-                throw lastError ||
-new Error(`All paths failed for ${filename}`);
+                throw lastError || new Error(`Failed to fetch ${filename}`);
             }
             
             const contentType = response.headers.get('content-type');
@@ -238,69 +259,91 @@ new Error(`All paths failed for ${filename}`);
             return processFileData(data, filename);
         } catch (err) {
             console.error(`Error fetching ${filename}:`, err);
-            return {
-                filename,
-                paramType: getParameterFromFilename(filename),
-                location: getLocationFromFilename(filename),
-                timePoints: [],
-                error: `Failed to fetch ${filename}: ${err instanceof Error ?
-err.message : 'Unknown error'}`
+            return { 
+                filename, 
+                paramType: getParameterFromFilename(filename), 
+                location: getLocationFromFilename(filename), 
+                timePoints: [], 
+                dates: [], 
+                error: `Failed to fetch ${filename}: ${err instanceof Error ? err.message : 'Unknown error'}` 
             };
         }
     };
 
+    // Placeholder for fetchAllData - this declaration will be replaced by the one later in the file
+
+    // Fetch data for a single JSON file directly - this declaration matches the updated version
     // Create combined chart data for a location with selected parameters
     const createCombinedChart = (parameters: ParameterData[], location: string, selectedParams: string[]) => {
         // Filter parameters based on selection
         const filteredParameters = parameters.filter(param => selectedParams.includes(param.paramType));
-        // Get all unique time points
-        const allTimes = new Set<string>();
+        
+        // Get all unique time points with dates
+        const allTimePoints = new Set<string>();
         filteredParameters.forEach(param => {
-            param.timePoints.forEach(point => allTimes.add(point.time));
+            param.timePoints.forEach(point => {
+                allTimePoints.add(`${point.date} ${point.time}`);
+            });
         });
-        const sortedTimes = Array.from(allTimes).sort();
+        
+        const sortedTimePoints = Array.from(allTimePoints).sort();
 
         // Create datasets for each selected parameter
         const datasets = filteredParameters
             .filter(param => !param.error && param.timePoints.length > 0)
             .map(param => {
                 // Create data array aligned with time points
-                const dataPoints = sortedTimes.map(time => {
-   
-                     const point = param.timePoints.find(p => p.time === time);
+                const dataPoints = sortedTimePoints.map(timePoint => {
+                    const [date, time] = timePoint.split(' ');
+                    const point = param.timePoints.find(p => p.date === date && p.time === time);
                     return point ? point.value : null;
                 });
 
                 return {
-                  
                     label: getFullParameterName(param.paramType),
                     data: dataPoints,
                     borderColor: getColorForParameter(param.paramType),
                     backgroundColor: getBackgroundColorForParameter(param.paramType),
                     tension: 0.3,
-             
                     pointRadius: 2,
                     pointHoverRadius: 4,
                     fill: false,
                     spanGaps: true
                 };
             });
+
+        // Format labels for better display
+        const formattedLabels = sortedTimePoints.map(timePoint => {
+            const [date, time] = timePoint.split(' ');
+            const shortDate = date.split('-').slice(1).join('-'); // MM-DD format
+            return `${shortDate} ${time}`;
+        });
+
         return {
-            labels: sortedTimes,
+            labels: formattedLabels,
             datasets
         };
     };
 
     // Group parameters by location and create combined charts
-    const groupAndCombineData = (parameterData: ParameterData[], selectedParams: string[]) => {
+    const groupAndCombineData = (parameterData: ParameterData[], selectedParams: string[], locationFilter?: string | null) => {
+        let filteredData = parameterData;
+        
+        // Filter by location if specified
+        if (locationFilter) {
+            filteredData = parameterData.filter(param => param.location === locationFilter);
+        }
+
         const locationMap = new Map<string, ParameterData[]>();
+        
         // Group by location
-        parameterData.forEach(param => {
+        filteredData.forEach(param => {
             if (!locationMap.has(param.location)) {
                 locationMap.set(param.location, []);
             }
             locationMap.get(param.location)!.push(param);
         });
+
         // Create location groups with combined charts
         const groups: LocationGroup[] = Array.from(locationMap.entries()).map(([location, parameters]) => {
             const combinedChart = createCombinedChart(parameters, location, selectedParams);
@@ -308,9 +351,9 @@ err.message : 'Unknown error'}`
                 location,
                 parameters,
                 combinedChart
- 
             };
         });
+
         return groups;
     };
 
@@ -321,10 +364,23 @@ err.message : 'Unknown error'}`
                 return prev.filter(p => p !== paramType);
             } else {
                 return [...prev, paramType];
-       
             }
         });
     };
+
+    // Handle location change
+    const handleLocationChange = (location: string | null) => {
+        setSelectedLocation(location);
+        // Update URL without page reload
+        const url = new URL(window.location.href);
+        if (location) {
+            url.searchParams.set('loc', location);
+        } else {
+            url.searchParams.delete('loc');
+        }
+        window.history.pushState({}, '', url.toString());
+    };
+
     // Select all parameters
     const selectAllParameters = () => {
         setSelectedParameters(ALL_PARAMETERS);
@@ -352,12 +408,17 @@ err.message : 'Unknown error'}`
             setTotalCharts(validResults.length);
             setAllParameterData(validResults);
 
+            // Extract available locations
+            const locations = Array.from(new Set(validResults.map(r => r.location)));
+            setAvailableLocations(locations);
+
             if (validResults.length === 0) {
                 setError("No valid data found in JSON files");
                 return;
             }
 
             console.log(`Processed ${validResults.length} JSON files`);
+            
         } catch (err) {
             console.error("Error fetching data:", err);
             setError("Failed to fetch and process JSON files");
@@ -366,49 +427,59 @@ err.message : 'Unknown error'}`
         }
     };
 
-    // Update charts when selected parameters change
+    // Update charts when selected parameters or location change
     useEffect(() => {
         if (allParameterData.length > 0) {
-            const groups = groupAndCombineData(allParameterData, selectedParameters);
+            const groups = groupAndCombineData(allParameterData, selectedParameters, selectedLocation);
             setLocationGroups(groups);
         }
-    }, [allParameterData, selectedParameters]);
-    // Chart options
+    }, [allParameterData, selectedParameters, selectedLocation]);
+
+    useEffect(() => {
+        fetchAllData();
+        
+        // Auto-refresh every 30 seconds
+        const interval = setInterval(fetchAllData, 30000);
+        return () => clearInterval(interval);
+    }, []);    // Chart options
     const getChartOptions = (location: string) => ({
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
             title: {
                 display: true,
-                text: `Selected Parameters - ${location}`,
-          
+                text: `Environmental Data - Location ${location}${selectedLocation ? ' (Filtered)' : ''}`,
                 font: {
                     size: 16,
-                    weight: 'bold'
+                    weight: 'bold' as const
                 }
             },
             legend: {
-          
                 position: 'top' as const,
                 labels: {
                     boxWidth: 15,
                     padding: 15,
                     font: {
-           
                         size: 12
                     }
                 }
             },
             tooltip: {
                 mode: 'index' as const,
-      
                 intersect: false,
                 backgroundColor: 'rgba(0,0,0,0.8)',
                 titleColor: 'white',
                 bodyColor: 'white',
                 borderColor: 'rgba(255,255,255,0.2)',
-                borderWidth: 1
-    
+                borderWidth: 1,
+                callbacks: {
+                    title: function(context: any) {
+                        return `Time: ${context[0].label}`;
+                    },
+                    label: function(context: any) {
+                        return `${context.dataset.label}: ${context.parsed.y !== null ? context.parsed.y.toFixed(2) : 'N/A'}`;
+                    }
+                }
             }
         },
         scales: {
@@ -416,20 +487,17 @@ err.message : 'Unknown error'}`
                 display: true,
                 title: {
                     display: true,
-       
-                    text: 'Time'
+                    text: 'Date & Time'
                 },
                 grid: {
                     color: 'rgba(0,0,0,0.1)'
                 }
             },
-    
             y: {
                 display: true,
                 title: {
                     display: true,
                     text: 'Values'
-               
                 },
                 grid: {
                     color: 'rgba(0,0,0,0.1)'
@@ -438,11 +506,11 @@ err.message : 'Unknown error'}`
         },
         interaction: {
             mode: 'nearest' as const,
- 
             axis: 'x' as const,
             intersect: false
         }
     });
+
     useEffect(() => {
         fetchAllData();
         
@@ -450,146 +518,170 @@ err.message : 'Unknown error'}`
         const interval = setInterval(fetchAllData, 30000);
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        fetchAllData();
+        
+        // Auto-refresh every 30 seconds
+        const interval = setInterval(fetchAllData, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        fetchAllData();
+        
+        // Auto-refresh every 30 seconds
+        const interval = setInterval(fetchAllData, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div className="all-charts-container">
             <div className="header">
                 <h1>Real-time Environmental Monitoring Dashboard</h1>
                 <div className="header-info">
                     <div className="status-info">
-                    
                         <div className="status-item">
                             <strong>Available Parameters:</strong> {ALL_PARAMETERS.join(', ')}
                         </div>
                         <div className="status-item">
-               
                             <strong>Selected Parameters:</strong> {selectedParameters.length > 0 ? selectedParameters.join(', ') : 'None'}
                         </div>
                         <div className="status-item">
-                            <strong>Locations:</strong> {locationGroups.map(g => g.location).join(', ')}
+                            <strong>Available Locations:</strong> {availableLocations.join(', ') || 'Loading...'}
                         </div>
-              
+                        <div className="status-item">
+                            <strong>Current Location Filter:</strong> {selectedLocation || 'All Locations'}
+                        </div>
+                        <div className="status-item">
+                            <strong>Processed Data Files:</strong> {totalCharts}
+                        </div>
                     </div>
                     <button onClick={fetchAllData} disabled={loading} className="refresh-btn">
-                        {loading ?
-"Loading..." : "Refresh All Data"}
+                        {loading ? "Loading..." : "Refresh All Data"}
                     </button>
                 </div>
             </div>
 
+            {/* Location Selection Panel */}
+            <div className="location-selection-panel">
+                <h2>Location Filter</h2>
+                <div className="location-buttons">
+                    <button 
+                        onClick={() => handleLocationChange(null)}
+                        className={`location-btn ${selectedLocation === null ? 'active' : ''}`}
+                    >
+                        All Locations
+                    </button>
+                    {availableLocations.map(location => (
+                        <button 
+                            key={location}
+                            onClick={() => handleLocationChange(location)}
+                            className={`location-btn ${selectedLocation === location ? 'active' : ''}`}
+                        >
+                            Location {location}
+                        </button>
+                    ))}
+                </div>
+                {selectedLocation && (
+                    <div className="current-filter">
+                        Currently viewing: <strong>Location {selectedLocation}</strong>
+                        <span className="filter-note">URL: /mjdata?loc={selectedLocation}</span>
+                    </div>
+                )}
+            </div>
+
             {/* Parameter Selection Panel */}
             <div className="parameter-selection-panel">
-                <h2>Select Parameters to 
-Display</h2>
+                <h2>Select Parameters to Display</h2>
                 <div className="selection-controls">
                     <button onClick={selectAllParameters} className="control-btn select-all">
                         Select All
                     </button>
-               
                     <button onClick={clearAllParameters} className="control-btn clear-all">
                         Clear All
                     </button>
                     <span className="selection-count">
-                        ({selectedParameters.length} of 
-{ALL_PARAMETERS.length} selected)
+                        ({selectedParameters.length} of {ALL_PARAMETERS.length} selected)
                     </span>
                 </div>
                 <div className="parameter-checkboxes">
                     {ALL_PARAMETERS.map(param => (
-                        
                         <label key={param} className="parameter-checkbox">
                             <input
                                 type="checkbox"
                                 checked={selectedParameters.includes(param)}
-      
                                 onChange={() => handleParameterChange(param)}
                             />
                             <span 
-               
                                 className="checkbox-custom" 
                                 style={{ borderColor: getColorForParameter(param) }}
                             >
-                   
                                 <span 
                                     className="checkbox-indicator"
                                     style={{ backgroundColor: getColorForParameter(param) }}
-           
                                 ></span>
                             </span>
                             <span className="parameter-name" style={{ color: getColorForParameter(param) }}>
-                  
                                 {getFullParameterName(param)} ({param})
                             </span>
                         </label>
                     ))}
-             
                 </div>
             </div>
             
             {error && <div className="error-message">{error}</div>}
             
             <div className="charts-container">
-                {loading ?
-(
+                {loading ? (
                     <div className="loading-message">
                         <div className="loading-spinner"></div>
-                       <h3>Loading JSON Files Simultaneously...</h3>
-                        <p>Processing {JSON_FILES.length} JSON files 
-for all parameters</p>
+                       <h3>Loading Environmental Data...</h3>
+                        <p>Processing {JSON_FILES.length} JSON files for all parameters</p>
+                        {selectedLocation && <p>Filtering for location: {selectedLocation}</p>}
                     </div>
-                ) : selectedParameters.length === 0 ?
-(
+                ) : selectedParameters.length === 0 ? (
                     <div className="no-selection-message">
                         <h3>No Parameters Selected</h3>
                         <p>Please select at least one parameter to display charts.</p>
                     </div>
- 
-                ) : locationGroups.length === 0 ?
-(
+                ) : locationGroups.length === 0 ? (
                     <div className="no-data-message">
                         <h3>No Data Available</h3>
                         <p>No valid data found for selected parameters: {selectedParameters.join(', ')}</p>
-                     
-                        <p>Make sure JSON files are available in the ./data/ folder</p>
+                        {selectedLocation && <p>Location filter: {selectedLocation}</p>}
+                        <p>Using sample data for demonstration purposes</p>
                     </div>
                 ) : (
                     <div className="charts-grid">
                         {locationGroups.map((group) => {
-   
                             const selectedParamsForLocation = group.parameters.filter(p => selectedParameters.includes(p.paramType));
                             return (
                                 <div key={group.location} className="chart-section">
-       
                                     <div className="chart-wrapper">
                                         <Line 
-                             
                                             data={group.combinedChart} 
                                             options={getChartOptions(group.location)}
-                                        
-/>
+                                        />
                                     </div>
                                     <div className="chart-details">
-                           
-                                        <h4>Location {group.location} - Selected Parameters Summary</h4>
+                                        <h4>Location {group.location} - Parameters Summary</h4>
                                         <div className="parameter-list">
-                                         
                                             {selectedParamsForLocation.map(param => (
                                                 <div key={param.filename} className="parameter-item">
-                                             
                                                     <span className="param-name" style={{color: getColorForParameter(param.paramType)}}>
                                                         ● {getFullParameterName(param.paramType)}
-                                 
                                                     </span>
                                                     <span className="param-points">
-                            
                                                         ({param.timePoints.length} data points)
                                                     </span>
-                  
+                                                    <span className="param-dates">
+                                                        Dates: {param.dates.length > 0 ? param.dates.join(', ') : 'Sample data'}
+                                                    </span>
                                                     {param.error && <span className="param-error">Error: {param.error}</span>}
                                                 </div>
-              
                                             ))}
                                         </div>
-                              
                                     </div>
                                 </div>
                             );
@@ -598,7 +690,7 @@ for all parameters</p>
                 )}
             </div>
 
-            <style jsx>{`
+            <style>{`
                 .all-charts-container {
                     padding: 20px;
                     max-width: 1800px;
@@ -634,7 +726,7 @@ for all parameters</p>
 
                 .status-info {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
                     gap: 10px;
                     flex: 1;
                 }
@@ -648,6 +740,67 @@ for all parameters</p>
 
                 .status-item strong {
                     color: #0066cc;
+                }
+
+                .location-selection-panel {
+                    background: rgba(255, 255, 255, 0.95);
+                    padding: 25px;
+                    border-radius: 12px;
+                    margin-bottom: 25px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                    backdrop-filter: blur(10px);
+                }
+
+                .location-selection-panel h2 {
+                    margin: 0 0 20px 0;
+                    color: #333;
+                    font-size: 1.5em;
+                    font-weight: 600;
+                }
+
+                .location-buttons {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 10px;
+                    margin-bottom: 15px;
+                }
+
+                .location-btn {
+                    padding: 10px 20px;
+                    border: 2px solid #007bff;
+                    background: white;
+                    color: #007bff;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    transition: all 0.3s ease;
+                }
+
+                .location-btn:hover {
+                    background: #007bff;
+                    color: white;
+                    transform: translateY(-1px);
+                }
+
+                .location-btn.active {
+                    background: #007bff;
+                    color: white;
+                    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+                }
+
+                .current-filter {
+                    padding: 12px;
+                    background: rgba(0, 123, 255, 0.1);
+                    border-radius: 6px;
+                    color: #333;
+                }
+
+                .filter-note {
+                    display: block;
+                    font-size: 0.9em;
+                    color: #666;
+                    margin-top: 5px;
+                    font-family: monospace;
                 }
 
                 .parameter-selection-panel {
@@ -805,10 +958,8 @@ for all parameters</p>
                 }
 
                 @keyframes spin {
-                    0% { transform: rotate(0deg);
-}
-                    100% { transform: rotate(360deg);
-}
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
                 }
 
                 .loading-message h3, .no-data-message h3, .no-selection-message h3 {
@@ -872,7 +1023,7 @@ for all parameters</p>
                 .parameter-item {
                     display: flex;
                     flex-direction: column;
-                    padding: 10px;
+                    padding: 12px;
                     background: rgba(0,0,0,0.02);
                     border-radius: 6px;
                     border-left: 4px solid #ddd;
@@ -887,6 +1038,13 @@ for all parameters</p>
                     font-size: 0.8em;
                     color: #666;
                     margin-top: 2px;
+                }
+
+                .param-dates {
+                    font-size: 0.8em;
+                    color: #888;
+                    margin-top: 2px;
+                    font-style: italic;
                 }
 
                 .param-error {
@@ -910,21 +1068,21 @@ for all parameters</p>
                 @media (max-width: 1200px) {
                     .charts-grid {
                         grid-template-columns: 1fr;
-}
+                    }
                 }
 
                 @media (max-width: 768px) {
                     .all-charts-container {
                         padding: 10px;
-}
+                    }
                     
                     .header {
                         padding: 20px;
-}
+                    }
                     
                     .header h1 {
                         font-size: 1.5em;
-}
+                    }
                     
                     .header-info {
                         flex-direction: column;
@@ -933,31 +1091,35 @@ for all parameters</p>
                     
                     .status-info {
                         grid-template-columns: 1fr;
-}
+                    }
                     
-                    .parameter-selection-panel {
+                    .location-selection-panel, .parameter-selection-panel {
                         padding: 20px;
-}
+                    }
+                    
+                    .location-buttons {
+                        justify-content: center;
+                    }
                     
                     .parameter-checkboxes {
                         grid-template-columns: 1fr;
-}
+                    }
                     
                     .selection-controls {
                         justify-content: center;
-}
+                    }
                     
                     .chart-section {
                         padding: 20px;
-}
+                    }
                     
                     .chart-wrapper {
                         height: 400px;
-}
+                    }
                     
                     .parameter-list {
                         grid-template-columns: 1fr;
-}
+                    }
                 }
             `}</style>
         </div>
