@@ -157,10 +157,10 @@ export default function HistoricalDataPage() {
             
             <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
               <h2 className="text-xl font-bold text-blue-800 mb-4 border-b border-gray-200 pb-2">
-                Historical Trends
+                Temperature Trends
               </h2>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={rawData} syncId="any-unique-string" margin={{ top: 10, right: 30, left: -20, bottom: 5 }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={rawData} syncId="sync-charts" margin={{ top: 10, right: 30, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="Time" tick={{ fontSize: 10 }} />
                   <YAxis padding={{ top: 20 }} />
@@ -171,10 +171,48 @@ export default function HistoricalDataPage() {
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Line type="monotone" dataKey="Temperature" stroke="#ef4444" dot={false} strokeWidth={2} />
+                  <Brush dataKey="Time" height={30} stroke="#8884d8" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
+              <h2 className="text-xl font-bold text-blue-800 mb-4 border-b border-gray-200 pb-2">
+                Pressure Trends
+              </h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={rawData} syncId="sync-charts" margin={{ top: 10, right: 30, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="Time" tick={{ fontSize: 10 }} />
+                  <YAxis padding={{ top: 20 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                    labelStyle={{ fontWeight: 'bold' }}
+                    itemStyle={{ color: '#333' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Line type="monotone" dataKey="Pressure" stroke="#3b82f6" dot={false} strokeWidth={2} />
                   <Line type="monotone" dataKey="Sea pressure" stroke="#10b981" dot={false} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
+              <h2 className="text-xl font-bold text-blue-800 mb-4 border-b border-gray-200 pb-2">
+                Depth Trends
+              </h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={rawData} syncId="sync-charts" margin={{ top: 10, right: 30, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="Time" tick={{ fontSize: 10 }} />
+                  <YAxis padding={{ top: 20 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                    labelStyle={{ fontWeight: 'bold' }}
+                    itemStyle={{ color: '#333' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Line type="monotone" dataKey="Depth" stroke="#8b5cf6" dot={false} strokeWidth={2} />
-                  <Brush dataKey="Time" height={30} stroke="#8884d8" />
                 </LineChart>
               </ResponsiveContainer>
             </div>

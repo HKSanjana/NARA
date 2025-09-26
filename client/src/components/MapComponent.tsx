@@ -512,8 +512,8 @@ export default function SeaLevelMonitor() {
                         {Object.entries(ranges).map(([key, range], idx) => {
                           if (!visibleSeries[key as keyof typeof visibleSeries]) return null;
                           const color = {
-                            seaLevel: '#2563EB',
-                            pressure: '#DC2626',
+                            seaLevel: '#000000ff',
+                            pressure: '#c82323ff',
                             radar: '#059669',
                             radar2: '#7C3AED'
                           }[key];
@@ -568,7 +568,7 @@ export default function SeaLevelMonitor() {
                                   cx={x}
                                   cy={y}
                                   r="2.5"  // Smaller radius
-                                  fill="#2563EB"
+                                  fill="#0b0b0bff"
                                   stroke="white"
                                   strokeWidth="1"  // Thinner stroke
                                 />
