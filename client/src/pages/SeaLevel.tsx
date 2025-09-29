@@ -30,27 +30,34 @@ const pins: Pin[] = [
     { id: 3, position: [6.1287, 81.1219], name: 'Hambanthota', description: 'Hambanthota is a coastal city located in the southeastern part of Sri Lanka.' },
     { id: 4, position: [5.9529, 80.4719], name: 'Mirissa', description: 'Mirissa is a small coastal town famous for its pristine beaches and whale watching.' },
     { id: 5, position: [8.5878, 81.2155], name: 'Trincomalee', description: 'Trincomalee is a port city located on the northeast coast of Sri Lanka.' },
-    //{ id: 6, position: [6.035, 80.217], name: 'Sea Level', description: 'This pin represents a coastal area where sea level monitoring can be conducted.' },
+    { id: 6, position: [5.9232, 80.5932], name: 'Dondra', description: 'Dondra is the southernmost point of Sri Lanka, known for its lighthouse and coastal views.' },
 ];
 
 const MapComponent: React.FC = () => {
     const [location, setLocation] = useLocation();
 
     const handlePinClick = (pinName: string) => {
-        if (pinName === 'Jaffna') {
-            // Redirect to the external URL for Jaffna data visualization
-            window.location.href = '/mjdata?loc=SL01'; // /mjdata?loc=SL01 
-        } else if (pinName === 'Mirissa') {
-            // Redirect to the external URL for Mirissa data visualization
-            window.location.href = '/mirissa-data';
-        } else if (pinName === 'Hambanthota') {
-            setLocation('/mjdata?loc=0002'); // /mjdata?loc=0002
-        } else if (pinName === 'Trincomalee') {
-            // Redirect to the external URL for Trincomalee data visualization
-            window.location.href = '/map?station=trin';
-        } else {
-            // Redirects all other pins to the /map page
-            setLocation('/map');
+        switch (pinName) {
+            case 'Jaffna':
+                setLocation('/mjdata?loc=SL01');
+                break;
+            case 'Mirissa':
+                setLocation('/mjdata?loc=002');
+                break;
+            case 'Hambanthota':
+                setLocation('/hdVisualize');
+                break;
+            case 'Trincomalee':
+                setLocation('/map?station=trin');
+                break;
+            case 'Colombo':
+                setLocation('/map?station=col');
+                break;
+            case 'Dondra':
+                setLocation('/dondra');
+                break;
+            default:
+                setLocation('/map');
         }
     };
 

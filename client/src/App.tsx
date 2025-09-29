@@ -26,6 +26,7 @@ import MapComponent from "@/components/MapComponent";
 import DataVisualization from './DataVisualization'; // Import the component
 import MirissaData from './MirissaData'; // Import the component
 import MJData from '@/pages/MJData'; // Import the component
+import Dondra from '@/pages/Dondra'; // Import the component
 
 function Router() {
     return (
@@ -49,7 +50,9 @@ function Router() {
             <Route path="/data-visualization" component={DataVisualization} />
             <Route path="/mirissa-data" component={MirissaData} />
             <Route path="/mjdata" component={MJData} />
+            <Route path="/dondra" component={Dondra} />
             <Route component={NotFound} />
+            
         </Switch>
     );
 }

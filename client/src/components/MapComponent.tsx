@@ -568,7 +568,7 @@ export default function SeaLevelMonitor() {
                                   cx={x}
                                   cy={y}
                                   r="2.5"  // Smaller radius
-                                  fill="#0b0b0bff"
+                                  fill="#2563EB"
                                   stroke="white"
                                   strokeWidth="1"  // Thinner stroke
                                 />
