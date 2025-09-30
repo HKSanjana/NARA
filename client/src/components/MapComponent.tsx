@@ -64,7 +64,7 @@ export default function SeaLevelMonitor() {
     try {
       // Construct the targetUrl with the encoded URL parameter
       const encodedUrl = encodeURIComponent(`https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`);
-      const targetUrl = `http://localhost:5000/proxy?url=${encodedUrl}`;
+      const targetUrl = `https://nara-vert.vercel.app/proxy?url=${encodedUrl}`;
       const response = await fetch(targetUrl);
 
 
