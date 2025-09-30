@@ -30,13 +30,16 @@ export default function SeaLevelMonitor() {
     radar: false,
     radar2: false
   });
-  
+
   const [selectedStation, setSelectedStation] = useState("colo");
   const [selectedPeriod, setSelectedPeriod] = useState("1hr");
   const [tideData, setTideData] = useState<TideData[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>("");
+
+  // Add auto-refresh interval state
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(60000); // 60 seconds default
 
   // Available monitoring stations
   const stations = [
@@ -45,7 +48,7 @@ export default function SeaLevelMonitor() {
     { id: "trin", name: "Trincomalee ", location: "Trincomalee", lat: "8.5874", lon: "81.2152", code: "trin" },
     //{ id: "Mirissa", name: "Mirissa", location: "Mirissa", lat: "6.1240", lon: "81.1185", code: "miri" },
   ];
-  
+
   // Define periods and their corresponding API codes
   const periods = [
     { id: "1hr", name: "Last 1 Hour", code: "0.5", chartPoints: 12 },
@@ -55,25 +58,27 @@ export default function SeaLevelMonitor() {
     { id: "month", name: "Last 30 Days", code: "30", chartPoints: 120 },
   ];
 
-  const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-  
+  // Function to fetch real tide data
   const fetchRealTideData = async (stationCode: string, periodCode: string) => {
     setIsLoading(true);
     try {
-      const targetUrl = `https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`;
-      const response = await fetch(proxyUrl + targetUrl);
-      
+      // Construct the targetUrl with the encoded URL parameter
+      const encodedUrl = encodeURIComponent(`https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`);
+      const targetUrl = `http://localhost:5000/proxy?url=${encodedUrl}`;
+      const response = await fetch(targetUrl);
+
+
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-      
+
       const text = await response.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
-      
+
       const headers = Array.from(doc.querySelectorAll('table tr th, table tr td.field'))
         .map(el => el.textContent?.trim().toLowerCase() || '');
-      
+
       const timeIndex = 0;
       const batIndex = headers.findIndex(h => h.includes('bat'));
       const prsIndex = headers.findIndex(h => h.includes('prs'));
@@ -82,19 +87,19 @@ export default function SeaLevelMonitor() {
       const radIndex = headers.findIndex(h => h.includes('rad'));
       const sw1Index = headers.findIndex(h => h.includes('sw1'));
       const sw2Index = headers.findIndex(h => h.includes('sw2'));
-      
+
       const rows = doc.querySelectorAll('table tr');
       const extractedData: TideData[] = [];
-      
+
       for (let i = 2; i < rows.length; i++) {
         const cells = rows[i].querySelectorAll('td');
         if (cells.length >= 2) {
           const timeText = cells[timeIndex]?.textContent || '';
-          
+
           const dataPoint: TideData = {
             time: timeText, bat: '', prs: '', ra2: '', rad: '', sw1: '', sw2: '', enc: ''
           };
-          
+
           if (batIndex > 0 && cells[batIndex]) dataPoint.bat = cells[batIndex].textContent?.trim() || '';
           if (prsIndex > 0 && cells[prsIndex]) dataPoint.prs = cells[prsIndex].textContent?.trim() || '';
           if (encIndex > 0 && cells[encIndex]) dataPoint.enc = cells[encIndex].textContent?.trim() || '';
@@ -102,31 +107,31 @@ export default function SeaLevelMonitor() {
           if (radIndex > 0 && cells[radIndex]) dataPoint.rad = cells[radIndex].textContent?.trim() || '';
           if (sw1Index > 0 && cells[sw1Index]) dataPoint.sw1 = cells[sw1Index].textContent?.trim() || '';
           if (sw2Index > 0 && cells[sw2Index]) dataPoint.sw2 = cells[sw2Index].textContent?.trim() || '';
-          
+
           extractedData.push(dataPoint);
         }
       }
-      
+
       setTideData(extractedData.filter(d => d.time.trim() !== ''));
-      
+
       const chartPoints: ChartDataPoint[] = extractedData
         .filter(d => d.time.trim() !== '')
         .map(d => {
           // Sea level from pressure sensor
-          const seaLevelValue = d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs)) ? 
-                               parseFloat(d.prs) : 0;
-          
+          const seaLevelValue = d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs)) ?
+            parseFloat(d.prs) : 0;
+
           // Atmospheric pressure
-          const pressureValue = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ? 
-                               parseFloat(d.ra2) : 0;
-          
+          const pressureValue = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ?
+            parseFloat(d.ra2) : 0;
+
           // Primary radar measurement (rad)
-          const radarValue = d.rad && d.rad !== '' && !isNaN(parseFloat(d.rad)) ? 
-                            parseFloat(d.rad) : 0;
-          
+          const radarValue = d.rad && d.rad !== '' && !isNaN(parseFloat(d.rad)) ?
+            parseFloat(d.rad) : 0;
+
           // Second radar measurement (ra2)
-          const radar2Value = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ? 
-                             parseFloat(d.ra2) : 0;
+          const radar2Value = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ?
+            parseFloat(d.ra2) : 0;
 
           return {
             time: d.time,
@@ -136,16 +141,16 @@ export default function SeaLevelMonitor() {
             radar2: Number(radar2Value.toFixed(3))
           };
         })
-        .filter(point => 
-          point.seaLevel !== 0 || 
-          point.pressure !== 0 || 
-          point.radar !== 0 || 
+        .filter(point =>
+          point.seaLevel !== 0 ||
+          point.pressure !== 0 ||
+          point.radar !== 0 ||
           point.radar2 !== 0
         );
 
       setChartData(chartPoints);
       setLastUpdated(new Date().toLocaleString());
-      
+
     } catch (error) {
       console.error("Error fetching real tide data:", error);
       setTideData([]);
@@ -155,28 +160,45 @@ export default function SeaLevelMonitor() {
     }
   };
 
+  // UPDATED: Effect to set the initial station from URL parameters, runs only once on mount
   useEffect(() => {
-    // Get station from URL parameters
     const params = new URLSearchParams(window.location.search);
     const stationParam = params.get('station');
-    
-    // Set the station if it exists in our stations array
     if (stationParam && stations.some(s => s.id === stationParam)) {
       setSelectedStation(stationParam);
     }
+  }, []); // Empty dependency array ensures this runs only once after the initial render
 
-    const station = stations.find(s => s.id === (stationParam || selectedStation));
+  // UPDATED: Effect to fetch data when station or period changes, and to handle auto-refresh
+  useEffect(() => {
+    const station = stations.find(s => s.id === selectedStation);
     const period = periods.find(p => p.id === selectedPeriod);
+
+    // Fetch data whenever the station or period changes
     if (station && period) {
       fetchRealTideData(station.code, period.code);
     }
-  }, [selectedStation, selectedPeriod]);
+
+    // Set up the auto-refresh interval. This interval will be cleared and reset
+    // with the correct, up-to-date state values whenever a dependency changes.
+    const intervalId = setInterval(() => {
+      const currentStation = stations.find(s => s.id === selectedStation);
+      const currentPeriod = periods.find(p => p.id === selectedPeriod);
+      if (currentStation && currentPeriod) {
+        fetchRealTideData(currentStation.code, currentPeriod.code);
+      }
+    }, autoRefreshInterval);
+
+    // Cleanup function to clear the interval when the component unmounts
+    // or before the effect re-runs due to a dependency change.
+    return () => clearInterval(intervalId);
+  }, [selectedStation, selectedPeriod, autoRefreshInterval]); // Dependencies for the effect
 
   const currentConditions = useMemo(() => {
     if (tideData.length === 0) return null;
     const latest = tideData.reverse()[0];
     tideData.reverse(); // Reverse back to original order
-    
+
     let prsValue;
     if (latest.prs && latest.prs !== '' && !isNaN(parseFloat(latest.prs))) {
       prsValue = parseFloat(latest.prs);
@@ -185,7 +207,7 @@ export default function SeaLevelMonitor() {
     } else {
       return null;
     }
-    
+
     let trend = 'stable';
     if (tideData.length > 3) {
       const recent = tideData.slice(-4).map(d => {
@@ -193,19 +215,19 @@ export default function SeaLevelMonitor() {
         else if (d.enc && !isNaN(parseFloat(d.enc))) return parseFloat(d.enc);
         return NaN;
       }).filter(v => !isNaN(v));
-      
+
       if (recent.length >= 3) {
-        const avgRecent = (recent[recent.length-1] + recent[recent.length-2]) / 2;
+        const avgRecent = (recent[recent.length - 1] + recent[recent.length - 2]) / 2;
         const avgPrevious = (recent[0] + recent[1]) / 2;
-        
+
         if (avgRecent > avgPrevious + 0.005) trend = 'rising';
         else if (avgRecent < avgPrevious - 0.005) trend = 'falling';
       }
     }
-    
+
     const pressureData = latest.ra2 && latest.ra2 !== '' ? `${parseFloat(latest.ra2).toFixed(1)} hPa` : 'N/A';
     const radarData = latest.rad && latest.rad !== '' ? `${parseFloat(latest.rad).toFixed(2)}m` : latest.enc && latest.enc !== '' ? `${parseFloat(latest.enc).toFixed(2)}m` : 'N/A';
-    
+
     return {
       seaLevel: `${prsValue.toFixed(2)}m`,
       trend,
@@ -232,31 +254,39 @@ export default function SeaLevelMonitor() {
     }
   };
 
+  // Add this near the controls section, after the existing refresh button
+  const autoRefreshOptions = [
+    { value: 30000, label: '30 seconds' },
+    { value: 60000, label: '1 minute' },
+    { value: 300000, label: '5 minutes' },
+    { value: 600000, label: '10 minutes' }
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <section
-      className="relative bg-cover bg-center py-16"
-      style={{ backgroundImage: `url(${myImage1})` }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-  <h1
-    className="text-4xl lg:text-5xl font-bold mb-6 text-white"
-    style={{
-      textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-    }}
-  >
-    Real-Time Sea Level Monitoring
-  </h1>
-  <p
-    className="text-xl max-w-3xl mx-auto text-white"
-    style={{
-      textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
-    }}
-  >
-    Live data from IOC Sea Level Monitoring stations around Sri Lanka's coastline
-  </p>
-</div>
+        className="relative bg-cover bg-center py-16"
+        style={{ backgroundImage: `url(${myImage1})` }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1
+            className="text-4xl lg:text-5xl font-bold mb-6 text-white"
+            style={{
+              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            Real-Time Sea Level Monitoring
+          </h1>
+          <p
+            className="text-xl max-w-3xl mx-auto text-white"
+            style={{
+              textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+            }}
+          >
+            Live data from IOC Sea Level Monitoring stations around Sri Lanka's coastline
+          </p>
+        </div>
 
       </section>
 
@@ -267,8 +297,8 @@ export default function SeaLevelMonitor() {
           <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
             <div className="flex gap-4">
               <div className="w-64">
-                <select 
-                  value={selectedStation} 
+                <select
+                  value={selectedStation}
                   onChange={(e) => setSelectedStation(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -281,8 +311,8 @@ export default function SeaLevelMonitor() {
               </div>
 
               <div className="w-48">
-                <select 
-                  value={selectedPeriod} 
+                <select
+                  value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -296,7 +326,7 @@ export default function SeaLevelMonitor() {
             </div>
 
             <div className="flex gap-4 items-center">
-              <button 
+              <button
                 onClick={() => {
                   const station = stations.find(s => s.id === selectedStation);
                   const period = periods.find(p => p.id === selectedPeriod);
@@ -308,7 +338,24 @@ export default function SeaLevelMonitor() {
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh Data
               </button>
-              <a 
+
+              {/* Add auto-refresh control */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Auto-refresh:</span>
+                <select
+                  value={autoRefreshInterval}
+                  onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+                  className="border border-gray-300 rounded-md text-sm p-1"
+                >
+                  {autoRefreshOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <a
                 href="http://localhost:5000/hdVisualize"
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -324,7 +371,7 @@ export default function SeaLevelMonitor() {
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-blue-900 mb-8">Current Conditions</h2>
-          
+
           {currentConditions ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {/* Main Station Data */}
@@ -341,13 +388,13 @@ export default function SeaLevelMonitor() {
                   </div>
                   {getTrendIcon(currentConditions.trend)}
                 </div>
-                
+
                 <div className="space-y-3">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-blue-900">{currentConditions.seaLevel}</div>
                     <div className="text-sm text-gray-600">Sea Level (prs)</div>
                   </div>
-                  
+
                   <div className="pt-3 border-t">
                     <div className="flex justify-between items-center">
                       <span className={`text-sm font-medium ${getTrendColor(currentConditions.trend)}`}>
@@ -356,7 +403,7 @@ export default function SeaLevelMonitor() {
                       <span className="text-xs text-gray-500">{currentConditions.lastReading}</span>
                     </div>
                   </div>
-              </div>
+                </div>
               </div>
 
               {/* Environmental Data */}
@@ -427,14 +474,14 @@ export default function SeaLevelMonitor() {
                 <Waves className="w-5 h-5 mr-2 text-blue-600" />
                 <h3 className="text-xl font-semibold">Data Trends</h3>
               </div>
-              
+
               {/* Add series toggles */}
               <div className="flex gap-4">
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
                     checked={visibleSeries.seaLevel}
-                    onChange={e => setVisibleSeries({...visibleSeries, seaLevel: e.target.checked})}
+                    onChange={e => setVisibleSeries({ ...visibleSeries, seaLevel: e.target.checked })}
                     className="rounded text-blue-600"
                   />
                   <span className="text-sm">Sea Level</span>
@@ -443,7 +490,7 @@ export default function SeaLevelMonitor() {
                   <input
                     type="checkbox"
                     checked={visibleSeries.pressure}
-                    onChange={e => setVisibleSeries({...visibleSeries, pressure: e.target.checked})}
+                    onChange={e => setVisibleSeries({ ...visibleSeries, pressure: e.target.checked })}
                     className="rounded text-red-600"
                   />
                   <span className="text-sm">Pressure</span>
@@ -452,7 +499,7 @@ export default function SeaLevelMonitor() {
                   <input
                     type="checkbox"
                     checked={visibleSeries.radar}
-                    onChange={e => setVisibleSeries({...visibleSeries, radar: e.target.checked})}
+                    onChange={e => setVisibleSeries({ ...visibleSeries, radar: e.target.checked })}
                     className="rounded text-green-600"
                   />
                   <span className="text-sm">Radar</span>
@@ -461,7 +508,7 @@ export default function SeaLevelMonitor() {
                   <input
                     type="checkbox"
                     checked={visibleSeries.radar2}
-                    onChange={e => setVisibleSeries({...visibleSeries, radar2: e.target.checked})}
+                    onChange={e => setVisibleSeries({ ...visibleSeries, radar2: e.target.checked })}
                     className="rounded text-purple-600"
                   />
                   <span className="text-sm">Radar 2 (ra2)</span>
@@ -487,7 +534,7 @@ export default function SeaLevelMonitor() {
                     const getRange = (data: number[]) => {
                       const validData = data.filter(val => val !== 0);
                       if (validData.length === 0) return { min: 0, max: 1, range: 1 };
-                      
+
                       const min = Math.min(...validData);
                       const max = Math.max(...validData);
                       const range = Math.max(max - min, 0.1);
@@ -512,12 +559,12 @@ export default function SeaLevelMonitor() {
                         {Object.entries(ranges).map(([key, range], idx) => {
                           if (!visibleSeries[key as keyof typeof visibleSeries]) return null;
                           const color = {
-                            seaLevel: '#000000ff',
-                            pressure: '#c82323ff',
+                            seaLevel: '#2563EB',
+                            pressure: '#DC2626',
                             radar: '#059669',
                             radar2: '#7C3AED'
                           }[key];
-                          
+
                           const label = {
                             seaLevel: 'Sea Level (m)',
                             pressure: 'Pressure (hPa)',
@@ -642,7 +689,7 @@ export default function SeaLevelMonitor() {
                           .map((d, i) => {
                             const originalIndex = chartData.indexOf(d);
                             const x = 90 + (originalIndex * 650 / Math.max(chartData.length - 1, 1));
-                            
+
                             return (
                               <g key={i}>
                                 {/* Tick mark */}
@@ -662,13 +709,13 @@ export default function SeaLevelMonitor() {
                                   className="text-xs fill-gray-600 font-medium"
                                   transform={selectedPeriod === "month" ? `rotate(45, ${x}, 275)` : undefined}
                                 >
-                                  {selectedPeriod === "1hr" || selectedPeriod === "day" 
-                                    ? d.time.substring(d.time.length - 5) 
+                                  {selectedPeriod === "1hr" || selectedPeriod === "day"
+                                    ? d.time.substring(d.time.length - 5)
                                     : d.time.split(' ')[0]}
                                 </text>
                               </g>
                             );
-                        })}
+                          })}
 
                         {/* X-axis label with background */}
                         <rect
@@ -743,47 +790,47 @@ export default function SeaLevelMonitor() {
       )}
       <section>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
+          <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
 
-        
 
-        {/* Right - Contact Form */}
-        <div className="lg:w-1/2 bg-gradient-to-br from-blue-100 via-teal-50 to-white p-6 rounded-lg shadow-lg border border-blue-200">
-          <h2 className="text-xl font-bold mb-4 text-blue-800">Get in Touch</h2>
-          <p className="text-gray-600 mb-6">
-            Have questions or need more details about sea level data? Fill in your details below and our team will get back to you.
-          </p>
-          <form className="space-y-4">
-            <div>
-              <label className="block mb-1 font-semibold text-gray-800">Your Name <span className="text-red-500">*</span></label>
-              <input type="text" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
+
+            {/* Right - Contact Form */}
+            <div className="lg:w-1/2 bg-gradient-to-br from-blue-100 via-teal-50 to-white p-6 rounded-lg shadow-lg border border-blue-200">
+              <h2 className="text-xl font-bold mb-4 text-blue-800">Get in Touch</h2>
+              <p className="text-gray-600 mb-6">
+                Have questions or need more details about sea level data? Fill in your details below and our team will get back to you.
+              </p>
+              <form className="space-y-4">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-800">Your Name <span className="text-red-500">*</span></label>
+                  <input type="text" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-800">Your Email <span className="text-red-500">*</span></label>
+                  <input type="email" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-800">Subject</label>
+                  <input type="text" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-800">Your Message</label>
+                  <textarea className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" rows={5}></textarea>
+                </div>
+
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-blue-600 to-teal-500 text-white py-2 px-6 rounded-lg hover:opacity-90 transition duration-200 shadow-md"
+                >
+                  Send Message
+                </button>
+              </form>
             </div>
-
-            <div>
-              <label className="block mb-1 font-semibold text-gray-800">Your Email <span className="text-red-500">*</span></label>
-              <input type="email" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold text-gray-800">Subject</label>
-              <input type="text" className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold text-gray-800">Your Message</label>
-              <textarea className="border border-gray-300 p-2 w-full rounded focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm" rows="5"></textarea>
-            </div>
-
-            <button
-              type="submit"
-              className="bg-gradient-to-r from-blue-600 to-teal-500 text-white py-2 px-6 rounded-lg hover:opacity-90 transition duration-200 shadow-md"
-            >
-              Send Message
-            </button>
-          </form>
+          </div>
         </div>
-      </div>
-    </div>
 
 
       </section>

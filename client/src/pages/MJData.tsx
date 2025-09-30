@@ -564,7 +564,7 @@ const AllChartsViewer: React.FC = () => {
             </div>
 
             {/* Location Selection Panel */}
-            <div className="location-selection-panel">
+            {/* <div className="location-selection-panel">
                 <h2>Location Filter</h2>
                 <div className="location-buttons">
                     <button 
@@ -589,7 +589,7 @@ const AllChartsViewer: React.FC = () => {
                         <span className="filter-note">URL: /mjdata?loc={selectedLocation}</span>
                     </div>
                 )}
-            </div>
+            </div> */}
 
             {/* Parameter Selection Panel */}
             <div className="parameter-selection-panel">

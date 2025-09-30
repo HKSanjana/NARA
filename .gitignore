@@ -8,3 +8,5 @@ vite.config.ts.*
 
 client/src/data/*.txt
 client/src/data/*.json
+
+others/
