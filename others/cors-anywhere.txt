@@ -1,0 +1,3242 @@
+Directory structure:
+└── rob--w-cors-anywhere/
+    ├── README.md
+    ├── demo.html
+    ├── LICENSE
+    ├── package.json
+    ├── Procfile
+    ├── server.js
+    ├── .eslintignore
+    ├── .eslintrc
+    ├── .travis.yml
+    ├── lib/
+    │   ├── cors-anywhere.js
+    │   ├── help.txt
+    │   ├── rate-limit.js
+    │   └── regexp-top-level-domain.js
+    └── test/
+        ├── cert.pem
+        ├── child.js
+        ├── customHelp.html
+        ├── customHelp.txt
+        ├── dummy.txt
+        ├── key.pem
+        ├── setup.js
+        ├── test-examples.js
+        ├── test-memory.js
+        ├── test-ratelimit.js
+        └── test.js
+
+================================================
+FILE: README.md
+================================================
+[![Build Status](https://travis-ci.com/Rob--W/cors-anywhere.svg?branch=master)](https://travis-ci.com/Rob--W/cors-anywhere)
+[![Coverage Status](https://coveralls.io/repos/github/Rob--W/cors-anywhere/badge.svg?branch=master)](https://coveralls.io/github/Rob--W/cors-anywhere?branch=master)
+
+**CORS Anywhere** is a NodeJS proxy which adds CORS headers to the proxied request.
+
+The url to proxy is literally taken from the path, validated and proxied. The protocol
+part of the proxied URI is optional, and defaults to "http". If port 443 is specified,
+the protocol defaults to "https".
+
+This package does not put any restrictions on the http methods or headers, except for
+cookies. Requesting [user credentials](http://www.w3.org/TR/cors/#user-credentials) is disallowed.
+The app can be configured to require a header for proxying a request, for example to avoid
+a direct visit from the browser.
+
+## Example
+
+```javascript
+// Listen on a specific host via the HOST environment variable
+var host = process.env.HOST || '0.0.0.0';
+// Listen on a specific port via the PORT environment variable
+var port = process.env.PORT || 8080;
+
+var cors_proxy = require('cors-anywhere');
+cors_proxy.createServer({
+    originWhitelist: [], // Allow all origins
+    requireHeader: ['origin', 'x-requested-with'],
+    removeHeaders: ['cookie', 'cookie2']
+}).listen(port, host, function() {
+    console.log('Running CORS Anywhere on ' + host + ':' + port);
+});
+
+```
+Request examples:
+
+* `http://localhost:8080/http://google.com/` - Google.com with CORS headers
+* `http://localhost:8080/google.com` - Same as previous.
+* `http://localhost:8080/google.com:443` - Proxies `https://google.com/`
+* `http://localhost:8080/` - Shows usage text, as defined in `lib/help.txt`
+* `http://localhost:8080/favicon.ico` - Replies 404 Not found
+
+Live examples:
+
+* https://cors-anywhere.herokuapp.com/
+* https://robwu.nl/cors-anywhere.html - This demo shows how to use the API.
+
+## Documentation
+
+### Client
+
+To use the API, just prefix the URL with the API URL. Take a look at [demo.html](demo.html) for an example.
+A concise summary of the documentation is provided at [lib/help.txt](lib/help.txt).
+
+**Note: as of February 2021, access to the demo server requires an opt-in**,
+see: https://github.com/Rob--W/cors-anywhere/issues/301
+
+If you want to automatically enable cross-domain requests when needed, use the following snippet:
+
+```javascript
+(function() {
+    var cors_api_host = 'cors-anywhere.herokuapp.com';
+    var cors_api_url = 'https://' + cors_api_host + '/';
+    var slice = [].slice;
+    var origin = window.location.protocol + '//' + window.location.host;
+    var open = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function() {
+        var args = slice.call(arguments);
+        var targetOrigin = /^https?:\/\/([^\/]+)/i.exec(args[1]);
+        if (targetOrigin && targetOrigin[0].toLowerCase() !== origin &&
+            targetOrigin[1] !== cors_api_host) {
+            args[1] = cors_api_url + args[1];
+        }
+        return open.apply(this, args);
+    };
+})();
+```
+
+If you're using jQuery, you can also use the following code **instead of** the previous one:
+
+```javascript
+jQuery.ajaxPrefilter(function(options) {
+    if (options.crossDomain && jQuery.support.cors) {
+        options.url = 'https://cors-anywhere.herokuapp.com/' + options.url;
+    }
+});
+```
+
+### Server
+
+The module exports `createServer(options)`, which creates a server that handles
+proxy requests. The following options are supported:
+
+* function `getProxyForUrl` - If set, specifies which intermediate proxy to use for a given URL.
+  If the return value is void, a direct request is sent. The default implementation is
+  [`proxy-from-env`](https://github.com/Rob--W/proxy-from-env), which respects the standard proxy
+  environment variables (e.g. `https_proxy`, `no_proxy`, etc.).  
+* array of strings `originBlacklist` - If set, requests whose origin is listed are blocked.  
+  Example: `['https://bad.example.com', 'http://bad.example.com']`
+* array of strings `originWhitelist` - If set, requests whose origin is not listed are blocked.  
+  If this list is empty, all origins are allowed.
+  Example: `['https://good.example.com', 'http://good.example.com']`
+* function `handleInitialRequest` - If set, it is called with the request, response and a parsed
+  URL of the requested destination (null if unavailable). If the function returns true, the request
+  will not be handled further. Then the function is responsible for handling the request.
+  This feature can be used to passively monitor requests, for example for logging (return false).
+* function `checkRateLimit` - If set, it is called with the origin (string) of the request. If this
+  function returns a non-empty string, the request is rejected and the string is send to the client.
+* boolean `redirectSameOrigin` - If true, requests to URLs from the same origin will not be proxied but redirected.
+  The primary purpose for this option is to save server resources by delegating the request to the client
+  (since same-origin requests should always succeed, even without proxying).
+* array of strings `requireHeader` - If set, the request must include this header or the API will refuse to proxy.  
+  Recommended if you want to prevent users from using the proxy for normal browsing.  
+  Example: `['Origin', 'X-Requested-With']`.
+* array of lowercase strings `removeHeaders` - Exclude certain headers from being included in the request.  
+  Example: `["cookie"]`
+* dictionary of lowercase strings `setHeaders` - Set headers for the request (overwrites existing ones).  
+  Example: `{"x-powered-by": "CORS Anywhere"}`
+* number `corsMaxAge` - If set, an Access-Control-Max-Age request header with this value (in seconds) will be added.  
+  Example: `600` - Allow CORS preflight request to be cached by the browser for 10 minutes.
+* string `helpFile` - Set the help file (shown at the homepage).  
+  Example: `"myCustomHelpText.txt"`
+
+For advanced users, the following options are also provided.
+
+* `httpProxyOptions` - Under the hood, [http-proxy](https://github.com/nodejitsu/node-http-proxy)
+  is used to proxy requests. Use this option if you really need to pass options
+  to http-proxy. The documentation for these options can be found [here](https://github.com/nodejitsu/node-http-proxy#options).
+* `httpsOptions` - If set, a `https.Server` will be created. The given options are passed to the
+  [`https.createServer`](https://nodejs.org/api/https.html#https_https_createserver_options_requestlistener) method.
+
+For even more advanced usage (building upon CORS Anywhere),
+see the sample code in [test/test-examples.js](test/test-examples.js).
+
+### Demo server
+
+A public demo of CORS Anywhere is available at https://cors-anywhere.herokuapp.com. This server is
+only provided so that you can easily and quickly try out CORS Anywhere. To ensure that the service
+stays available to everyone, the number of requests per period is limited, except for requests from
+some explicitly whitelisted origins.
+
+**Note: as of February 2021, access to the demo server requires an opt-in**,
+see: https://github.com/Rob--W/cors-anywhere/issues/301
+
+If you expect lots of traffic, please host your own instance of CORS Anywhere, and make sure that
+the CORS Anywhere server only whitelists your site to prevent others from using your instance of
+CORS Anywhere as an open proxy.
+
+For instance, to run a CORS Anywhere server that accepts any request from some example.com sites on
+port 8080, use:
+```
+export PORT=8080
+export CORSANYWHERE_WHITELIST=https://example.com,http://example.com,http://example.com:8080
+node server.js
+```
+
+This application can immediately be run on Heroku, see https://devcenter.heroku.com/articles/nodejs
+for instructions. Note that their [Acceptable Use Policy](https://www.heroku.com/policy/aup) forbids
+the use of Heroku for operating an open proxy, so make sure that you either enforce a whitelist as
+shown above, or severly rate-limit the number of requests.
+
+For example, to blacklist abuse.example.com and rate-limit everything to 50 requests per 3 minutes,
+except for my.example.com and my2.example.com (which may be unlimited), use:
+
+```
+export PORT=8080
+export CORSANYWHERE_BLACKLIST=https://abuse.example.com,http://abuse.example.com
+export CORSANYWHERE_RATELIMIT='50 3 my.example.com my2.example.com'
+node server.js
+```
+
+
+## License
+
+Copyright (C) 2013 - 2021 Rob Wu <rob@robwu.nl>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: demo.html
+================================================
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Demo of CORS Anywhere</title>
+<meta name="viewport" content="width=device-width">
+<style>
+html, body {
+  margin: 0;
+  height: 100%;
+  padding: 3px;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+}
+* {
+  -moz-box-sizing: border-box;
+       box-sizing: border-box;
+}
+label { display: block; }
+input {
+  display: block;
+  width: 100%;
+  padding: 8px 5px;
+  border: 1px solid #CCC;
+}
+button {
+  display: inline-block;
+  width: 49%;
+  padding: 8px;
+}
+textarea {
+  width: 100%;
+  height: 100%;
+}
+#top {
+  height: 180px;
+  position: relative;
+
+}
+#bottom {
+  height: 100%;
+  margin-top: -180px;
+  padding-top: 180px;
+}
+</style>
+</head>
+<body>
+<div id="top">
+  CORS Anywhere demo &bull; <a href="https://github.com/Rob--W/cors-anywhere/">Github</a> &bull; <a href="http://cors-anywhere.herokuapp.com">Live server</a>.
+  <label>
+    Url to be fetched (example: <a href="//robwu.nl/dump.php">robwu.nl/dump.php</a>)
+    <input type="url" id="url" value="">
+  </label>
+  <label>
+    If using POST, enter the data:
+    <input type="text" id="data">
+  </label>
+  <label>
+    <button id="get">GET</button><button id="post">POST</button>
+  </label>
+</div>
+<div id="bottom">
+  <textarea id="output"></textarea>
+</div>
+
+<script>
+  var cors_api_url = 'https://cors-anywhere.herokuapp.com/';
+  function doCORSRequest(options, printResult) {
+    var x = new XMLHttpRequest();
+    x.open(options.method, cors_api_url + options.url);
+    x.onload = x.onerror = function() {
+      printResult(
+        options.method + ' ' + options.url + '\n' +
+        x.status + ' ' + x.statusText + '\n\n' +
+        (x.responseText || '')
+      );
+    };
+    if (/^POST/i.test(options.method)) {
+      x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    }
+    x.send(options.data);
+  }
+
+  // Bind event
+  (function() {
+    var urlField = document.getElementById('url');
+    var dataField = document.getElementById('data');
+    var outputField = document.getElementById('output');
+    document.getElementById('get').onclick =
+    document.getElementById('post').onclick = function(e) {
+      e.preventDefault();
+      doCORSRequest({
+        method: this.id === 'post' ? 'POST' : 'GET',
+        url: urlField.value,
+        data: dataField.value
+      }, function printResult(result) {
+        outputField.value = result;
+      });
+    };
+  })();
+  if (typeof console === 'object') {
+    console.log('// To test a local CORS Anywhere server, set cors_api_url. For example:');
+    console.log('cors_api_url = "http://localhost:8080/"');
+  }
+</script>
+</body>
+</html>
+
+
+
+================================================
+FILE: LICENSE
+================================================
+The MIT License
+
+Copyright (C) 2013 - 2021 Rob Wu <rob@robwu.nl>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: package.json
+================================================
+{
+  "name": "cors-anywhere",
+  "version": "0.4.4",
+  "description": "CORS Anywhere is a reverse proxy which adds CORS headers to the proxied request. Request URL is taken from the path",
+  "license": "MIT",
+  "author": "Rob Wu <rob@robwu.nl>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rob--W/cors-anywhere.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rob--W/cors-anywhere/issues/",
+    "email": "rob@robwu.nl"
+  },
+  "keywords": [
+    "cors",
+    "cross-domain",
+    "http-proxy",
+    "proxy",
+    "heroku"
+  ],
+  "main": "./lib/cors-anywhere.js",
+  "files": [
+    "lib/",
+    "test/",
+    "Procfile",
+    "demo.html",
+    "server.js"
+  ],
+  "dependencies": {
+    "http-proxy": "1.11.1",
+    "proxy-from-env": "0.0.1"
+  },
+  "devDependencies": {
+    "coveralls": "^2.11.6",
+    "eslint": "^2.2.0",
+    "istanbul": "^0.4.2",
+    "lolex": "^1.5.0",
+    "mocha": "^3.4.2",
+    "nock": "^8.2.1",
+    "supertest": "^2.0.1"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "mocha ./test/test*.js --reporter spec",
+    "test-coverage": "istanbul cover ./node_modules/.bin/_mocha -- test/test.js test/test-ratelimit.js --reporter spec"
+  },
+  "engines": {
+    "node": ">=0.10.0"
+  }
+}
+
+
+
+================================================
+FILE: Procfile
+================================================
+web: node server.js
+
+
+
+================================================
+FILE: server.js
+================================================
+// Listen on a specific host via the HOST environment variable
+var host = process.env.HOST || '0.0.0.0';
+// Listen on a specific port via the PORT environment variable
+var port = process.env.PORT || 8080;
+
+// Grab the blacklist from the command-line so that we can update the blacklist without deploying
+// again. CORS Anywhere is open by design, and this blacklist is not used, except for countering
+// immediate abuse (e.g. denial of service). If you want to block all origins except for some,
+// use originWhitelist instead.
+var originBlacklist = parseEnvList(process.env.CORSANYWHERE_BLACKLIST);
+var originWhitelist = parseEnvList(process.env.CORSANYWHERE_WHITELIST);
+function parseEnvList(env) {
+  if (!env) {
+    return [];
+  }
+  return env.split(',');
+}
+
+// Set up rate-limiting to avoid abuse of the public CORS Anywhere server.
+var checkRateLimit = require('./lib/rate-limit')(process.env.CORSANYWHERE_RATELIMIT);
+
+var cors_proxy = require('./lib/cors-anywhere');
+cors_proxy.createServer({
+  originBlacklist: originBlacklist,
+  originWhitelist: originWhitelist,
+  requireHeader: ['origin', 'x-requested-with'],
+  checkRateLimit: checkRateLimit,
+  removeHeaders: [
+    'cookie',
+    'cookie2',
+    // Strip Heroku-specific headers
+    'x-request-start',
+    'x-request-id',
+    'via',
+    'connect-time',
+    'total-route-time',
+    // Other Heroku added debug headers
+    // 'x-forwarded-for',
+    // 'x-forwarded-proto',
+    // 'x-forwarded-port',
+  ],
+  redirectSameOrigin: true,
+  httpProxyOptions: {
+    // Do not add X-Forwarded-For, etc. headers, because Heroku already adds it.
+    xfwd: false,
+  },
+}).listen(port, host, function() {
+  console.log('Running CORS Anywhere on ' + host + ':' + port);
+});
+
+
+
+================================================
+FILE: .eslintignore
+================================================
+coverage/
+
+
+
+================================================
+FILE: .eslintrc
+================================================
+{
+  "env": {
+    "node": true
+  },
+  "rules": {
+    "array-bracket-spacing": [2, "never"],
+    "block-scoped-var": 2,
+    "brace-style": [2, "1tbs", {"allowSingleLine": true}],
+    "comma-dangle": [2, "always-multiline"],
+    "computed-property-spacing": [2, "never"],
+    "curly": 2,
+    "eol-last": 2,
+    "eqeqeq": [2, "smart"],
+    "max-len": [1, 125],
+    "new-cap": 1,
+    "no-extend-native": 2,
+    "no-mixed-spaces-and-tabs": 2,
+    "no-trailing-spaces": 2,
+    "no-undef": 2,
+    "no-unused-vars": 1,
+    "no-use-before-define": [2, "nofunc"],
+    "object-curly-spacing": [2, "never"],
+    "quotes": [2, "single", "avoid-escape"],
+    "semi": [2, "always"],
+    "keyword-spacing": 2,
+    "space-unary-ops": 2
+  }
+}
+
+
+
+================================================
+FILE: .travis.yml
+================================================
+language: node_js
+node_js:
+  - 0.10
+  - 4
+  - 6
+  - 7
+  - 8
+  - 9
+  - 11
+  - 12
+  - 13
+  - 13
+  - 14
+  - 15
+script:
+  - npm run lint
+  - npm run test
+  - npm run test-coverage && cat coverage/lcov.info | ./node_modules/.bin/coveralls && rm -rf coverage
+
+
+
+================================================
+FILE: lib/cors-anywhere.js
+================================================
+// © 2013 - 2016 Rob Wu <rob@robwu.nl>
+// Released under the MIT license
+
+'use strict';
+
+var httpProxy = require('http-proxy');
+var net = require('net');
+var url = require('url');
+var regexp_tld = require('./regexp-top-level-domain');
+var getProxyForUrl = require('proxy-from-env').getProxyForUrl;
+
+var help_text = {};
+function showUsage(help_file, headers, response) {
+  var isHtml = /\.html$/.test(help_file);
+  headers['content-type'] = isHtml ? 'text/html' : 'text/plain';
+  if (help_text[help_file] != null) {
+    response.writeHead(200, headers);
+    response.end(help_text[help_file]);
+  } else {
+    require('fs').readFile(help_file, 'utf8', function(err, data) {
+      if (err) {
+        console.error(err);
+        response.writeHead(500, headers);
+        response.end();
+      } else {
+        help_text[help_file] = data;
+        showUsage(help_file, headers, response); // Recursive call, but since data is a string, the recursion will end
+      }
+    });
+  }
+}
+
+/**
+ * Check whether the specified hostname is valid.
+ *
+ * @param hostname {string} Host name (excluding port) of requested resource.
+ * @return {boolean} Whether the requested resource can be accessed.
+ */
+function isValidHostName(hostname) {
+  return !!(
+    regexp_tld.test(hostname) ||
+    net.isIPv4(hostname) ||
+    net.isIPv6(hostname)
+  );
+}
+
+/**
+ * Adds CORS headers to the response headers.
+ *
+ * @param headers {object} Response headers
+ * @param request {ServerRequest}
+ */
+function withCORS(headers, request) {
+  headers['access-control-allow-origin'] = '*';
+  var corsMaxAge = request.corsAnywhereRequestState.corsMaxAge;
+  if (request.method === 'OPTIONS' && corsMaxAge) {
+    headers['access-control-max-age'] = corsMaxAge;
+  }
+  if (request.headers['access-control-request-method']) {
+    headers['access-control-allow-methods'] = request.headers['access-control-request-method'];
+    delete request.headers['access-control-request-method'];
+  }
+  if (request.headers['access-control-request-headers']) {
+    headers['access-control-allow-headers'] = request.headers['access-control-request-headers'];
+    delete request.headers['access-control-request-headers'];
+  }
+
+  headers['access-control-expose-headers'] = Object.keys(headers).join(',');
+
+  return headers;
+}
+
+/**
+ * Performs the actual proxy request.
+ *
+ * @param req {ServerRequest} Incoming http request
+ * @param res {ServerResponse} Outgoing (proxied) http request
+ * @param proxy {HttpProxy}
+ */
+function proxyRequest(req, res, proxy) {
+  var location = req.corsAnywhereRequestState.location;
+  req.url = location.path;
+
+  var proxyOptions = {
+    changeOrigin: false,
+    prependPath: false,
+    target: location,
+    headers: {
+      host: location.host,
+    },
+    // HACK: Get hold of the proxyReq object, because we need it later.
+    // https://github.com/nodejitsu/node-http-proxy/blob/v1.11.1/lib/http-proxy/passes/web-incoming.js#L144
+    buffer: {
+      pipe: function(proxyReq) {
+        var proxyReqOn = proxyReq.on;
+        // Intercepts the handler that connects proxyRes to res.
+        // https://github.com/nodejitsu/node-http-proxy/blob/v1.11.1/lib/http-proxy/passes/web-incoming.js#L146-L158
+        proxyReq.on = function(eventName, listener) {
+          if (eventName !== 'response') {
+            return proxyReqOn.call(this, eventName, listener);
+          }
+          return proxyReqOn.call(this, 'response', function(proxyRes) {
+            if (onProxyResponse(proxy, proxyReq, proxyRes, req, res)) {
+              try {
+                listener(proxyRes);
+              } catch (err) {
+                // Wrap in try-catch because an error could occur:
+                // "RangeError: Invalid status code: 0"
+                // https://github.com/Rob--W/cors-anywhere/issues/95
+                // https://github.com/nodejitsu/node-http-proxy/issues/1080
+
+                // Forward error (will ultimately emit the 'error' event on our proxy object):
+                // https://github.com/nodejitsu/node-http-proxy/blob/v1.11.1/lib/http-proxy/passes/web-incoming.js#L134
+                proxyReq.emit('error', err);
+              }
+            }
+          });
+        };
+        return req.pipe(proxyReq);
+      },
+    },
+  };
+
+  var proxyThroughUrl = req.corsAnywhereRequestState.getProxyForUrl(location.href);
+  if (proxyThroughUrl) {
+    proxyOptions.target = proxyThroughUrl;
+    proxyOptions.toProxy = true;
+    // If a proxy URL was set, req.url must be an absolute URL. Then the request will not be sent
+    // directly to the proxied URL, but through another proxy.
+    req.url = location.href;
+  }
+
+  // Start proxying the request
+  try {
+    proxy.web(req, res, proxyOptions);
+  } catch (err) {
+    proxy.emit('error', err, req, res);
+  }
+}
+
+/**
+ * This method modifies the response headers of the proxied response.
+ * If a redirect is detected, the response is not sent to the client,
+ * and a new request is initiated.
+ *
+ * client (req) -> CORS Anywhere -> (proxyReq) -> other server
+ * client (res) <- CORS Anywhere <- (proxyRes) <- other server
+ *
+ * @param proxy {HttpProxy}
+ * @param proxyReq {ClientRequest} The outgoing request to the other server.
+ * @param proxyRes {ServerResponse} The response from the other server.
+ * @param req {IncomingMessage} Incoming HTTP request, augmented with property corsAnywhereRequestState
+ * @param req.corsAnywhereRequestState {object}
+ * @param req.corsAnywhereRequestState.location {object} See parseURL
+ * @param req.corsAnywhereRequestState.getProxyForUrl {function} See proxyRequest
+ * @param req.corsAnywhereRequestState.proxyBaseUrl {string} Base URL of the CORS API endpoint
+ * @param req.corsAnywhereRequestState.maxRedirects {number} Maximum number of redirects
+ * @param req.corsAnywhereRequestState.redirectCount_ {number} Internally used to count redirects
+ * @param res {ServerResponse} Outgoing response to the client that wanted to proxy the HTTP request.
+ *
+ * @returns {boolean} true if http-proxy should continue to pipe proxyRes to res.
+ */
+function onProxyResponse(proxy, proxyReq, proxyRes, req, res) {
+  var requestState = req.corsAnywhereRequestState;
+
+  var statusCode = proxyRes.statusCode;
+
+  if (!requestState.redirectCount_) {
+    res.setHeader('x-request-url', requestState.location.href);
+  }
+  // Handle redirects
+  if (statusCode === 301 || statusCode === 302 || statusCode === 303 || statusCode === 307 || statusCode === 308) {
+    var locationHeader = proxyRes.headers.location;
+    var parsedLocation;
+    if (locationHeader) {
+      locationHeader = url.resolve(requestState.location.href, locationHeader);
+      parsedLocation = parseURL(locationHeader);
+    }
+    if (parsedLocation) {
+      if (statusCode === 301 || statusCode === 302 || statusCode === 303) {
+        // Exclude 307 & 308, because they are rare, and require preserving the method + request body
+        requestState.redirectCount_ = requestState.redirectCount_ + 1 || 1;
+        if (requestState.redirectCount_ <= requestState.maxRedirects) {
+          // Handle redirects within the server, because some clients (e.g. Android Stock Browser)
+          // cancel redirects.
+          // Set header for debugging purposes. Do not try to parse it!
+          res.setHeader('X-CORS-Redirect-' + requestState.redirectCount_, statusCode + ' ' + locationHeader);
+
+          req.method = 'GET';
+          req.headers['content-length'] = '0';
+          delete req.headers['content-type'];
+          requestState.location = parsedLocation;
+
+          // Remove all listeners (=reset events to initial state)
+          req.removeAllListeners();
+
+          // Remove the error listener so that the ECONNRESET "error" that
+          // may occur after aborting a request does not propagate to res.
+          // https://github.com/nodejitsu/node-http-proxy/blob/v1.11.1/lib/http-proxy/passes/web-incoming.js#L134
+          proxyReq.removeAllListeners('error');
+          proxyReq.once('error', function catchAndIgnoreError() {});
+          proxyReq.abort();
+
+          // Initiate a new proxy request.
+          proxyRequest(req, res, proxy);
+          return false;
+        }
+      }
+      proxyRes.headers.location = requestState.proxyBaseUrl + '/' + locationHeader;
+    }
+  }
+
+  // Strip cookies
+  delete proxyRes.headers['set-cookie'];
+  delete proxyRes.headers['set-cookie2'];
+
+  proxyRes.headers['x-final-url'] = requestState.location.href;
+  withCORS(proxyRes.headers, req);
+  return true;
+}
+
+
+/**
+ * @param req_url {string} The requested URL (scheme is optional).
+ * @return {object} URL parsed using url.parse
+ */
+function parseURL(req_url) {
+  var match = req_url.match(/^(?:(https?:)?\/\/)?(([^\/?]+?)(?::(\d{0,5})(?=[\/?]|$))?)([\/?][\S\s]*|$)/i);
+  //                              ^^^^^^^          ^^^^^^^^      ^^^^^^^                ^^^^^^^^^^^^
+  //                            1:protocol       3:hostname     4:port                 5:path + query string
+  //                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  //                                            2:host
+  if (!match) {
+    return null;
+  }
+  if (!match[1]) {
+    if (/^https?:/i.test(req_url)) {
+      // The pattern at top could mistakenly parse "http:///" as host="http:" and path=///.
+      return null;
+    }
+    // Scheme is omitted.
+    if (req_url.lastIndexOf('//', 0) === -1) {
+      // "//" is omitted.
+      req_url = '//' + req_url;
+    }
+    req_url = (match[4] === '443' ? 'https:' : 'http:') + req_url;
+  }
+  var parsed = url.parse(req_url);
+  if (!parsed.hostname) {
+    // "http://:1/" and "http:/notenoughslashes" could end up here.
+    return null;
+  }
+  return parsed;
+}
+
+// Request handler factory
+function getHandler(options, proxy) {
+  var corsAnywhere = {
+    handleInitialRequest: null,     // Function that may handle the request instead, by returning a truthy value.
+    getProxyForUrl: getProxyForUrl, // Function that specifies the proxy to use
+    maxRedirects: 5,                // Maximum number of redirects to be followed.
+    originBlacklist: [],            // Requests from these origins will be blocked.
+    originWhitelist: [],            // If non-empty, requests not from an origin in this list will be blocked.
+    checkRateLimit: null,           // Function that may enforce a rate-limit by returning a non-empty string.
+    redirectSameOrigin: false,      // Redirect the client to the requested URL for same-origin requests.
+    requireHeader: null,            // Require a header to be set?
+    removeHeaders: [],              // Strip these request headers.
+    setHeaders: {},                 // Set these request headers.
+    corsMaxAge: 0,                  // If set, an Access-Control-Max-Age header with this value (in seconds) will be added.
+    helpFile: __dirname + '/help.txt',
+  };
+
+  Object.keys(corsAnywhere).forEach(function(option) {
+    if (Object.prototype.hasOwnProperty.call(options, option)) {
+      corsAnywhere[option] = options[option];
+    }
+  });
+
+  // Convert corsAnywhere.requireHeader to an array of lowercase header names, or null.
+  if (corsAnywhere.requireHeader) {
+    if (typeof corsAnywhere.requireHeader === 'string') {
+      corsAnywhere.requireHeader = [corsAnywhere.requireHeader.toLowerCase()];
+    } else if (!Array.isArray(corsAnywhere.requireHeader) || corsAnywhere.requireHeader.length === 0) {
+      corsAnywhere.requireHeader = null;
+    } else {
+      corsAnywhere.requireHeader = corsAnywhere.requireHeader.map(function(headerName) {
+        return headerName.toLowerCase();
+      });
+    }
+  }
+  var hasRequiredHeaders = function(headers) {
+    return !corsAnywhere.requireHeader || corsAnywhere.requireHeader.some(function(headerName) {
+      return Object.hasOwnProperty.call(headers, headerName);
+    });
+  };
+
+  return function(req, res) {
+    req.corsAnywhereRequestState = {
+      getProxyForUrl: corsAnywhere.getProxyForUrl,
+      maxRedirects: corsAnywhere.maxRedirects,
+      corsMaxAge: corsAnywhere.corsMaxAge,
+    };
+
+    var cors_headers = withCORS({}, req);
+    if (req.method === 'OPTIONS') {
+      // Pre-flight request. Reply successfully:
+      res.writeHead(200, cors_headers);
+      res.end();
+      return;
+    }
+
+    var location = parseURL(req.url.slice(1));
+
+    if (corsAnywhere.handleInitialRequest && corsAnywhere.handleInitialRequest(req, res, location)) {
+      return;
+    }
+
+    if (!location) {
+      // Special case http:/notenoughslashes, because new users of the library frequently make the
+      // mistake of putting this application behind a server/router that normalizes the URL.
+      // See https://github.com/Rob--W/cors-anywhere/issues/238#issuecomment-629638853
+      if (/^\/https?:\/[^/]/i.test(req.url)) {
+        res.writeHead(400, 'Missing slash', cors_headers);
+        res.end('The URL is invalid: two slashes are needed after the http(s):.');
+        return;
+      }
+      // Invalid API call. Show how to correctly use the API
+      showUsage(corsAnywhere.helpFile, cors_headers, res);
+      return;
+    }
+
+    if (location.host === 'iscorsneeded') {
+      // Is CORS needed? This path is provided so that API consumers can test whether it's necessary
+      // to use CORS. The server's reply is always No, because if they can read it, then CORS headers
+      // are not necessary.
+      res.writeHead(200, {'Content-Type': 'text/plain'});
+      res.end('no');
+      return;
+    }
+
+    if (location.port > 65535) {
+      // Port is higher than 65535
+      res.writeHead(400, 'Invalid port', cors_headers);
+      res.end('Port number too large: ' + location.port);
+      return;
+    }
+
+    if (!/^\/https?:/.test(req.url) && !isValidHostName(location.hostname)) {
+      // Don't even try to proxy invalid hosts (such as /favicon.ico, /robots.txt)
+      res.writeHead(404, 'Invalid host', cors_headers);
+      res.end('Invalid host: ' + location.hostname);
+      return;
+    }
+
+    if (!hasRequiredHeaders(req.headers)) {
+      res.writeHead(400, 'Header required', cors_headers);
+      res.end('Missing required request header. Must specify one of: ' + corsAnywhere.requireHeader);
+      return;
+    }
+
+    var origin = req.headers.origin || '';
+    if (corsAnywhere.originBlacklist.indexOf(origin) >= 0) {
+      res.writeHead(403, 'Forbidden', cors_headers);
+      res.end('The origin "' + origin + '" was blacklisted by the operator of this proxy.');
+      return;
+    }
+
+    if (corsAnywhere.originWhitelist.length && corsAnywhere.originWhitelist.indexOf(origin) === -1) {
+      res.writeHead(403, 'Forbidden', cors_headers);
+      res.end('The origin "' + origin + '" was not whitelisted by the operator of this proxy.');
+      return;
+    }
+
+    var rateLimitMessage = corsAnywhere.checkRateLimit && corsAnywhere.checkRateLimit(origin);
+    if (rateLimitMessage) {
+      res.writeHead(429, 'Too Many Requests', cors_headers);
+      res.end('The origin "' + origin + '" has sent too many requests.\n' + rateLimitMessage);
+      return;
+    }
+
+    if (corsAnywhere.redirectSameOrigin && origin && location.href[origin.length] === '/' &&
+        location.href.lastIndexOf(origin, 0) === 0) {
+      // Send a permanent redirect to offload the server. Badly coded clients should not waste our resources.
+      cors_headers.vary = 'origin';
+      cors_headers['cache-control'] = 'private';
+      cors_headers.location = location.href;
+      res.writeHead(301, 'Please use a direct request', cors_headers);
+      res.end();
+      return;
+    }
+
+    var isRequestedOverHttps = req.connection.encrypted || /^\s*https/.test(req.headers['x-forwarded-proto']);
+    var proxyBaseUrl = (isRequestedOverHttps ? 'https://' : 'http://') + req.headers.host;
+
+    corsAnywhere.removeHeaders.forEach(function(header) {
+      delete req.headers[header];
+    });
+
+    Object.keys(corsAnywhere.setHeaders).forEach(function(header) {
+      req.headers[header] = corsAnywhere.setHeaders[header];
+    });
+
+    req.corsAnywhereRequestState.location = location;
+    req.corsAnywhereRequestState.proxyBaseUrl = proxyBaseUrl;
+
+    proxyRequest(req, res, proxy);
+  };
+}
+
+// Create server with default and given values
+// Creator still needs to call .listen()
+exports.createServer = function createServer(options) {
+  options = options || {};
+
+  // Default options:
+  var httpProxyOptions = {
+    xfwd: true,            // Append X-Forwarded-* headers
+    secure: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+  };
+  // Allow user to override defaults and add own options
+  if (options.httpProxyOptions) {
+    Object.keys(options.httpProxyOptions).forEach(function(option) {
+      httpProxyOptions[option] = options.httpProxyOptions[option];
+    });
+  }
+
+  var proxy = httpProxy.createServer(httpProxyOptions);
+  var requestHandler = getHandler(options, proxy);
+  var server;
+  if (options.httpsOptions) {
+    server = require('https').createServer(options.httpsOptions, requestHandler);
+  } else {
+    server = require('http').createServer(requestHandler);
+  }
+
+  // When the server fails, just show a 404 instead of Internal server error
+  proxy.on('error', function(err, req, res) {
+    if (res.headersSent) {
+      // This could happen when a protocol error occurs when an error occurs
+      // after the headers have been received (and forwarded). Do not write
+      // the headers because it would generate an error.
+      // Prior to Node 13.x, the stream would have ended.
+      // As of Node 13.x, we must explicitly close it.
+      if (res.writableEnded === false) {
+        res.end();
+      }
+      return;
+    }
+
+    // When the error occurs after setting headers but before writing the response,
+    // then any previously set headers must be removed.
+    var headerNames = res.getHeaderNames ? res.getHeaderNames() : Object.keys(res._headers || {});
+    headerNames.forEach(function(name) {
+      res.removeHeader(name);
+    });
+
+    res.writeHead(404, {'Access-Control-Allow-Origin': '*'});
+    res.end('Not found because of proxy error: ' + err);
+  });
+
+  return server;
+};
+
+
+
+================================================
+FILE: lib/help.txt
+================================================
+This API enables cross-origin requests to anywhere.
+
+Usage:
+
+/               Shows help
+/iscorsneeded   This is the only resource on this host which is served without CORS headers.
+/<url>          Create a request to <url>, and includes CORS headers in the response.
+
+If the protocol is omitted, it defaults to http (https if port 443 is specified).
+
+Cookies are disabled and stripped from requests.
+
+Redirects are automatically followed. For debugging purposes, each followed redirect results
+in the addition of a X-CORS-Redirect-n header, where n starts at 1. These headers are not
+accessible by the XMLHttpRequest API.
+After 5 redirects, redirects are not followed any more. The redirect response is sent back
+to the browser, which can choose to follow the redirect (handled automatically by the browser).
+
+The requested URL is available in the X-Request-URL response header.
+The final URL, after following all redirects, is available in the X-Final-URL response header.
+
+
+To prevent the use of the proxy for casual browsing, the API requires either the Origin
+or the X-Requested-With header to be set. To avoid unnecessary preflight (OPTIONS) requests,
+it's recommended to not manually set these headers in your code.
+
+
+Demo          :   https://robwu.nl/cors-anywhere.html
+Source code   :   https://github.com/Rob--W/cors-anywhere/
+Documentation :   https://github.com/Rob--W/cors-anywhere/#documentation
+
+
+
+================================================
+FILE: lib/rate-limit.js
+================================================
+'use strict';
+module.exports = function createRateLimitChecker(CORSANYWHERE_RATELIMIT) {
+  // Configure rate limit. The following format is accepted for CORSANYWHERE_RATELIMIT:
+  // <max requests per period> <period in minutes> <non-ratelimited hosts>
+  // where <non-ratelimited hosts> is a space-separated list of strings or regexes (/.../) that
+  // matches the whole host (ports have to be listed explicitly if applicable).
+  // <period in minutes> cannot be zero.
+  //
+  // Examples:
+  // - Allow any origin to make one request per 5 minutes:
+  //   1 5
+  //
+  // - Allow example.com to make an unlimited number of requests, and the others 1 per 5 minutes.
+  //   1 5 example.com
+  //
+  // - Allow example.com, or any subdomain to make any number of requests and block the rest:
+  //   0 1 /(.*\.)?example\.com/
+  //
+  // - Allow example.com and www.example.com, and block the rest:
+  //   0 1 example.com www.example.com
+  var rateLimitConfig = /^(\d+) (\d+)(?:\s*$|\s+(.+)$)/.exec(CORSANYWHERE_RATELIMIT);
+  if (!rateLimitConfig) {
+    // No rate limit by default.
+    return function checkRateLimit() {};
+  }
+  var maxRequestsPerPeriod = parseInt(rateLimitConfig[1]);
+  var periodInMinutes = parseInt(rateLimitConfig[2]);
+  var unlimitedPattern = rateLimitConfig[3]; // Will become a RegExp or void.
+  if (unlimitedPattern) {
+    var unlimitedPatternParts = [];
+    unlimitedPattern.trim().split(/\s+/).forEach(function(unlimitedHost, i) {
+      var startsWithSlash = unlimitedHost.charAt(0) === '/';
+      var endsWithSlash = unlimitedHost.slice(-1) === '/';
+      if (startsWithSlash || endsWithSlash) {
+        if (unlimitedHost.length === 1 || !startsWithSlash || !endsWithSlash) {
+          throw new Error('Invalid CORSANYWHERE_RATELIMIT. Regex at index ' + i +
+              ' must start and end with a slash ("/").');
+        }
+        unlimitedHost = unlimitedHost.slice(1, -1);
+        // Throws if the pattern is invalid.
+        new RegExp(unlimitedHost);
+      } else {
+        // Just escape RegExp characters even though they cannot appear in a host name.
+        // The only actual important escape is the dot.
+        unlimitedHost = unlimitedHost.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&');
+      }
+      unlimitedPatternParts.push(unlimitedHost);
+    });
+    unlimitedPattern = new RegExp('^(?:' + unlimitedPatternParts.join('|') + ')$', 'i');
+  }
+
+  var accessedHosts = Object.create(null);
+  setInterval(function() {
+    accessedHosts = Object.create(null);
+  }, periodInMinutes * 60000);
+
+  var rateLimitMessage = 'The number of requests is limited to ' + maxRequestsPerPeriod +
+    (periodInMinutes === 1 ? ' per minute' : ' per ' + periodInMinutes + ' minutes') + '. ' +
+    'Please self-host CORS Anywhere if you need more quota. ' +
+    'See https://github.com/Rob--W/cors-anywhere#demo-server';
+
+  return function checkRateLimit(origin) {
+    var host = origin.replace(/^[\w\-]+:\/\//i, '');
+    if (unlimitedPattern && unlimitedPattern.test(host)) {
+      return;
+    }
+    var count = accessedHosts[host] || 0;
+    ++count;
+    if (count > maxRequestsPerPeriod) {
+      return rateLimitMessage;
+    }
+    accessedHosts[host] = count;
+  };
+};
+
+
+
+================================================
+FILE: lib/regexp-top-level-domain.js
+================================================
+// Based on http://data.iana.org/TLD/tlds-alpha-by-domain.txt
+// '/\\.(?:' + document.body.firstChild.textContent.trim().split('\n').slice(1).join('|') + ')$/i';
+
+/* eslint max-len:0 */
+
+// # Version 2021031700, Last Updated Wed Mar 17 07:07:01 2021 UTC
+var regexp = /\.(?:AAA|AARP|ABARTH|ABB|ABBOTT|ABBVIE|ABC|ABLE|ABOGADO|ABUDHABI|AC|ACADEMY|ACCENTURE|ACCOUNTANT|ACCOUNTANTS|ACO|ACTOR|AD|ADAC|ADS|ADULT|AE|AEG|AERO|AETNA|AF|AFAMILYCOMPANY|AFL|AFRICA|AG|AGAKHAN|AGENCY|AI|AIG|AIRBUS|AIRFORCE|AIRTEL|AKDN|AL|ALFAROMEO|ALIBABA|ALIPAY|ALLFINANZ|ALLSTATE|ALLY|ALSACE|ALSTOM|AM|AMAZON|AMERICANEXPRESS|AMERICANFAMILY|AMEX|AMFAM|AMICA|AMSTERDAM|ANALYTICS|ANDROID|ANQUAN|ANZ|AO|AOL|APARTMENTS|APP|APPLE|AQ|AQUARELLE|AR|ARAB|ARAMCO|ARCHI|ARMY|ARPA|ART|ARTE|AS|ASDA|ASIA|ASSOCIATES|AT|ATHLETA|ATTORNEY|AU|AUCTION|AUDI|AUDIBLE|AUDIO|AUSPOST|AUTHOR|AUTO|AUTOS|AVIANCA|AW|AWS|AX|AXA|AZ|AZURE|BA|BABY|BAIDU|BANAMEX|BANANAREPUBLIC|BAND|BANK|BAR|BARCELONA|BARCLAYCARD|BARCLAYS|BAREFOOT|BARGAINS|BASEBALL|BASKETBALL|BAUHAUS|BAYERN|BB|BBC|BBT|BBVA|BCG|BCN|BD|BE|BEATS|BEAUTY|BEER|BENTLEY|BERLIN|BEST|BESTBUY|BET|BF|BG|BH|BHARTI|BI|BIBLE|BID|BIKE|BING|BINGO|BIO|BIZ|BJ|BLACK|BLACKFRIDAY|BLOCKBUSTER|BLOG|BLOOMBERG|BLUE|BM|BMS|BMW|BN|BNPPARIBAS|BO|BOATS|BOEHRINGER|BOFA|BOM|BOND|BOO|BOOK|BOOKING|BOSCH|BOSTIK|BOSTON|BOT|BOUTIQUE|BOX|BR|BRADESCO|BRIDGESTONE|BROADWAY|BROKER|BROTHER|BRUSSELS|BS|BT|BUDAPEST|BUGATTI|BUILD|BUILDERS|BUSINESS|BUY|BUZZ|BV|BW|BY|BZ|BZH|CA|CAB|CAFE|CAL|CALL|CALVINKLEIN|CAM|CAMERA|CAMP|CANCERRESEARCH|CANON|CAPETOWN|CAPITAL|CAPITALONE|CAR|CARAVAN|CARDS|CARE|CAREER|CAREERS|CARS|CASA|CASE|CASH|CASINO|CAT|CATERING|CATHOLIC|CBA|CBN|CBRE|CBS|CC|CD|CENTER|CEO|CERN|CF|CFA|CFD|CG|CH|CHANEL|CHANNEL|CHARITY|CHASE|CHAT|CHEAP|CHINTAI|CHRISTMAS|CHROME|CHURCH|CI|CIPRIANI|CIRCLE|CISCO|CITADEL|CITI|CITIC|CITY|CITYEATS|CK|CL|CLAIMS|CLEANING|CLICK|CLINIC|CLINIQUE|CLOTHING|CLOUD|CLUB|CLUBMED|CM|CN|CO|COACH|CODES|COFFEE|COLLEGE|COLOGNE|COM|COMCAST|COMMBANK|COMMUNITY|COMPANY|COMPARE|COMPUTER|COMSEC|CONDOS|CONSTRUCTION|CONSULTING|CONTACT|CONTRACTORS|COOKING|COOKINGCHANNEL|COOL|COOP|CORSICA|COUNTRY|COUPON|COUPONS|COURSES|CPA|CR|CREDIT|CREDITCARD|CREDITUNION|CRICKET|CROWN|CRS|CRUISE|CRUISES|CSC|CU|CUISINELLA|CV|CW|CX|CY|CYMRU|CYOU|CZ|DABUR|DAD|DANCE|DATA|DATE|DATING|DATSUN|DAY|DCLK|DDS|DE|DEAL|DEALER|DEALS|DEGREE|DELIVERY|DELL|DELOITTE|DELTA|DEMOCRAT|DENTAL|DENTIST|DESI|DESIGN|DEV|DHL|DIAMONDS|DIET|DIGITAL|DIRECT|DIRECTORY|DISCOUNT|DISCOVER|DISH|DIY|DJ|DK|DM|DNP|DO|DOCS|DOCTOR|DOG|DOMAINS|DOT|DOWNLOAD|DRIVE|DTV|DUBAI|DUCK|DUNLOP|DUPONT|DURBAN|DVAG|DVR|DZ|EARTH|EAT|EC|ECO|EDEKA|EDU|EDUCATION|EE|EG|EMAIL|EMERCK|ENERGY|ENGINEER|ENGINEERING|ENTERPRISES|EPSON|EQUIPMENT|ER|ERICSSON|ERNI|ES|ESQ|ESTATE|ET|ETISALAT|EU|EUROVISION|EUS|EVENTS|EXCHANGE|EXPERT|EXPOSED|EXPRESS|EXTRASPACE|FAGE|FAIL|FAIRWINDS|FAITH|FAMILY|FAN|FANS|FARM|FARMERS|FASHION|FAST|FEDEX|FEEDBACK|FERRARI|FERRERO|FI|FIAT|FIDELITY|FIDO|FILM|FINAL|FINANCE|FINANCIAL|FIRE|FIRESTONE|FIRMDALE|FISH|FISHING|FIT|FITNESS|FJ|FK|FLICKR|FLIGHTS|FLIR|FLORIST|FLOWERS|FLY|FM|FO|FOO|FOOD|FOODNETWORK|FOOTBALL|FORD|FOREX|FORSALE|FORUM|FOUNDATION|FOX|FR|FREE|FRESENIUS|FRL|FROGANS|FRONTDOOR|FRONTIER|FTR|FUJITSU|FUJIXEROX|FUN|FUND|FURNITURE|FUTBOL|FYI|GA|GAL|GALLERY|GALLO|GALLUP|GAME|GAMES|GAP|GARDEN|GAY|GB|GBIZ|GD|GDN|GE|GEA|GENT|GENTING|GEORGE|GF|GG|GGEE|GH|GI|GIFT|GIFTS|GIVES|GIVING|GL|GLADE|GLASS|GLE|GLOBAL|GLOBO|GM|GMAIL|GMBH|GMO|GMX|GN|GODADDY|GOLD|GOLDPOINT|GOLF|GOO|GOODYEAR|GOOG|GOOGLE|GOP|GOT|GOV|GP|GQ|GR|GRAINGER|GRAPHICS|GRATIS|GREEN|GRIPE|GROCERY|GROUP|GS|GT|GU|GUARDIAN|GUCCI|GUGE|GUIDE|GUITARS|GURU|GW|GY|HAIR|HAMBURG|HANGOUT|HAUS|HBO|HDFC|HDFCBANK|HEALTH|HEALTHCARE|HELP|HELSINKI|HERE|HERMES|HGTV|HIPHOP|HISAMITSU|HITACHI|HIV|HK|HKT|HM|HN|HOCKEY|HOLDINGS|HOLIDAY|HOMEDEPOT|HOMEGOODS|HOMES|HOMESENSE|HONDA|HORSE|HOSPITAL|HOST|HOSTING|HOT|HOTELES|HOTELS|HOTMAIL|HOUSE|HOW|HR|HSBC|HT|HU|HUGHES|HYATT|HYUNDAI|IBM|ICBC|ICE|ICU|ID|IE|IEEE|IFM|IKANO|IL|IM|IMAMAT|IMDB|IMMO|IMMOBILIEN|IN|INC|INDUSTRIES|INFINITI|INFO|ING|INK|INSTITUTE|INSURANCE|INSURE|INT|INTERNATIONAL|INTUIT|INVESTMENTS|IO|IPIRANGA|IQ|IR|IRISH|IS|ISMAILI|IST|ISTANBUL|IT|ITAU|ITV|IVECO|JAGUAR|JAVA|JCB|JE|JEEP|JETZT|JEWELRY|JIO|JLL|JM|JMP|JNJ|JO|JOBS|JOBURG|JOT|JOY|JP|JPMORGAN|JPRS|JUEGOS|JUNIPER|KAUFEN|KDDI|KE|KERRYHOTELS|KERRYLOGISTICS|KERRYPROPERTIES|KFH|KG|KH|KI|KIA|KIM|KINDER|KINDLE|KITCHEN|KIWI|KM|KN|KOELN|KOMATSU|KOSHER|KP|KPMG|KPN|KR|KRD|KRED|KUOKGROUP|KW|KY|KYOTO|KZ|LA|LACAIXA|LAMBORGHINI|LAMER|LANCASTER|LANCIA|LAND|LANDROVER|LANXESS|LASALLE|LAT|LATINO|LATROBE|LAW|LAWYER|LB|LC|LDS|LEASE|LECLERC|LEFRAK|LEGAL|LEGO|LEXUS|LGBT|LI|LIDL|LIFE|LIFEINSURANCE|LIFESTYLE|LIGHTING|LIKE|LILLY|LIMITED|LIMO|LINCOLN|LINDE|LINK|LIPSY|LIVE|LIVING|LIXIL|LK|LLC|LLP|LOAN|LOANS|LOCKER|LOCUS|LOFT|LOL|LONDON|LOTTE|LOTTO|LOVE|LPL|LPLFINANCIAL|LR|LS|LT|LTD|LTDA|LU|LUNDBECK|LUXE|LUXURY|LV|LY|MA|MACYS|MADRID|MAIF|MAISON|MAKEUP|MAN|MANAGEMENT|MANGO|MAP|MARKET|MARKETING|MARKETS|MARRIOTT|MARSHALLS|MASERATI|MATTEL|MBA|MC|MCKINSEY|MD|ME|MED|MEDIA|MEET|MELBOURNE|MEME|MEMORIAL|MEN|MENU|MERCKMSD|MG|MH|MIAMI|MICROSOFT|MIL|MINI|MINT|MIT|MITSUBISHI|MK|ML|MLB|MLS|MM|MMA|MN|MO|MOBI|MOBILE|MODA|MOE|MOI|MOM|MONASH|MONEY|MONSTER|MORMON|MORTGAGE|MOSCOW|MOTO|MOTORCYCLES|MOV|MOVIE|MP|MQ|MR|MS|MSD|MT|MTN|MTR|MU|MUSEUM|MUTUAL|MV|MW|MX|MY|MZ|NA|NAB|NAGOYA|NAME|NATIONWIDE|NATURA|NAVY|NBA|NC|NE|NEC|NET|NETBANK|NETFLIX|NETWORK|NEUSTAR|NEW|NEWS|NEXT|NEXTDIRECT|NEXUS|NF|NFL|NG|NGO|NHK|NI|NICO|NIKE|NIKON|NINJA|NISSAN|NISSAY|NL|NO|NOKIA|NORTHWESTERNMUTUAL|NORTON|NOW|NOWRUZ|NOWTV|NP|NR|NRA|NRW|NTT|NU|NYC|NZ|OBI|OBSERVER|OFF|OFFICE|OKINAWA|OLAYAN|OLAYANGROUP|OLDNAVY|OLLO|OM|OMEGA|ONE|ONG|ONL|ONLINE|ONYOURSIDE|OOO|OPEN|ORACLE|ORANGE|ORG|ORGANIC|ORIGINS|OSAKA|OTSUKA|OTT|OVH|PA|PAGE|PANASONIC|PARIS|PARS|PARTNERS|PARTS|PARTY|PASSAGENS|PAY|PCCW|PE|PET|PF|PFIZER|PG|PH|PHARMACY|PHD|PHILIPS|PHONE|PHOTO|PHOTOGRAPHY|PHOTOS|PHYSIO|PICS|PICTET|PICTURES|PID|PIN|PING|PINK|PIONEER|PIZZA|PK|PL|PLACE|PLAY|PLAYSTATION|PLUMBING|PLUS|PM|PN|PNC|POHL|POKER|POLITIE|PORN|POST|PR|PRAMERICA|PRAXI|PRESS|PRIME|PRO|PROD|PRODUCTIONS|PROF|PROGRESSIVE|PROMO|PROPERTIES|PROPERTY|PROTECTION|PRU|PRUDENTIAL|PS|PT|PUB|PW|PWC|PY|QA|QPON|QUEBEC|QUEST|QVC|RACING|RADIO|RAID|RE|READ|REALESTATE|REALTOR|REALTY|RECIPES|RED|REDSTONE|REDUMBRELLA|REHAB|REISE|REISEN|REIT|RELIANCE|REN|RENT|RENTALS|REPAIR|REPORT|REPUBLICAN|REST|RESTAURANT|REVIEW|REVIEWS|REXROTH|RICH|RICHARDLI|RICOH|RIL|RIO|RIP|RMIT|RO|ROCHER|ROCKS|RODEO|ROGERS|ROOM|RS|RSVP|RU|RUGBY|RUHR|RUN|RW|RWE|RYUKYU|SA|SAARLAND|SAFE|SAFETY|SAKURA|SALE|SALON|SAMSCLUB|SAMSUNG|SANDVIK|SANDVIKCOROMANT|SANOFI|SAP|SARL|SAS|SAVE|SAXO|SB|SBI|SBS|SC|SCA|SCB|SCHAEFFLER|SCHMIDT|SCHOLARSHIPS|SCHOOL|SCHULE|SCHWARZ|SCIENCE|SCJOHNSON|SCOT|SD|SE|SEARCH|SEAT|SECURE|SECURITY|SEEK|SELECT|SENER|SERVICES|SES|SEVEN|SEW|SEX|SEXY|SFR|SG|SH|SHANGRILA|SHARP|SHAW|SHELL|SHIA|SHIKSHA|SHOES|SHOP|SHOPPING|SHOUJI|SHOW|SHOWTIME|SI|SILK|SINA|SINGLES|SITE|SJ|SK|SKI|SKIN|SKY|SKYPE|SL|SLING|SM|SMART|SMILE|SN|SNCF|SO|SOCCER|SOCIAL|SOFTBANK|SOFTWARE|SOHU|SOLAR|SOLUTIONS|SONG|SONY|SOY|SPA|SPACE|SPORT|SPOT|SPREADBETTING|SR|SRL|SS|ST|STADA|STAPLES|STAR|STATEBANK|STATEFARM|STC|STCGROUP|STOCKHOLM|STORAGE|STORE|STREAM|STUDIO|STUDY|STYLE|SU|SUCKS|SUPPLIES|SUPPLY|SUPPORT|SURF|SURGERY|SUZUKI|SV|SWATCH|SWIFTCOVER|SWISS|SX|SY|SYDNEY|SYSTEMS|SZ|TAB|TAIPEI|TALK|TAOBAO|TARGET|TATAMOTORS|TATAR|TATTOO|TAX|TAXI|TC|TCI|TD|TDK|TEAM|TECH|TECHNOLOGY|TEL|TEMASEK|TENNIS|TEVA|TF|TG|TH|THD|THEATER|THEATRE|TIAA|TICKETS|TIENDA|TIFFANY|TIPS|TIRES|TIROL|TJ|TJMAXX|TJX|TK|TKMAXX|TL|TM|TMALL|TN|TO|TODAY|TOKYO|TOOLS|TOP|TORAY|TOSHIBA|TOTAL|TOURS|TOWN|TOYOTA|TOYS|TR|TRADE|TRADING|TRAINING|TRAVEL|TRAVELCHANNEL|TRAVELERS|TRAVELERSINSURANCE|TRUST|TRV|TT|TUBE|TUI|TUNES|TUSHU|TV|TVS|TW|TZ|UA|UBANK|UBS|UG|UK|UNICOM|UNIVERSITY|UNO|UOL|UPS|US|UY|UZ|VA|VACATIONS|VANA|VANGUARD|VC|VE|VEGAS|VENTURES|VERISIGN|VERSICHERUNG|VET|VG|VI|VIAJES|VIDEO|VIG|VIKING|VILLAS|VIN|VIP|VIRGIN|VISA|VISION|VIVA|VIVO|VLAANDEREN|VN|VODKA|VOLKSWAGEN|VOLVO|VOTE|VOTING|VOTO|VOYAGE|VU|VUELOS|WALES|WALMART|WALTER|WANG|WANGGOU|WATCH|WATCHES|WEATHER|WEATHERCHANNEL|WEBCAM|WEBER|WEBSITE|WED|WEDDING|WEIBO|WEIR|WF|WHOSWHO|WIEN|WIKI|WILLIAMHILL|WIN|WINDOWS|WINE|WINNERS|WME|WOLTERSKLUWER|WOODSIDE|WORK|WORKS|WORLD|WOW|WS|WTC|WTF|XBOX|XEROX|XFINITY|XIHUAN|XIN|XN--11B4C3D|XN--1CK2E1B|XN--1QQW23A|XN--2SCRJ9C|XN--30RR7Y|XN--3BST00M|XN--3DS443G|XN--3E0B707E|XN--3HCRJ9C|XN--3OQ18VL8PN36A|XN--3PXU8K|XN--42C2D9A|XN--45BR5CYL|XN--45BRJ9C|XN--45Q11C|XN--4DBRK0CE|XN--4GBRIM|XN--54B7FTA0CC|XN--55QW42G|XN--55QX5D|XN--5SU34J936BGSG|XN--5TZM5G|XN--6FRZ82G|XN--6QQ986B3XL|XN--80ADXHKS|XN--80AO21A|XN--80AQECDR1A|XN--80ASEHDB|XN--80ASWG|XN--8Y0A063A|XN--90A3AC|XN--90AE|XN--90AIS|XN--9DBQ2A|XN--9ET52U|XN--9KRT00A|XN--B4W605FERD|XN--BCK1B9A5DRE4C|XN--C1AVG|XN--C2BR7G|XN--CCK2B3B|XN--CCKWCXETD|XN--CG4BKI|XN--CLCHC0EA0B2G2A9GCD|XN--CZR694B|XN--CZRS0T|XN--CZRU2D|XN--D1ACJ3B|XN--D1ALF|XN--E1A4C|XN--ECKVDTC9D|XN--EFVY88H|XN--FCT429K|XN--FHBEI|XN--FIQ228C5HS|XN--FIQ64B|XN--FIQS8S|XN--FIQZ9S|XN--FJQ720A|XN--FLW351E|XN--FPCRJ9C3D|XN--FZC2C9E2C|XN--FZYS8D69UVGM|XN--G2XX48C|XN--GCKR3F0F|XN--GECRJ9C|XN--GK3AT1E|XN--H2BREG3EVE|XN--H2BRJ9C|XN--H2BRJ9C8C|XN--HXT814E|XN--I1B6B1A6A2E|XN--IMR513N|XN--IO0A7I|XN--J1AEF|XN--J1AMH|XN--J6W193G|XN--JLQ480N2RG|XN--JLQ61U9W7B|XN--JVR189M|XN--KCRX77D1X4A|XN--KPRW13D|XN--KPRY57D|XN--KPUT3I|XN--L1ACC|XN--LGBBAT1AD8J|XN--MGB9AWBF|XN--MGBA3A3EJT|XN--MGBA3A4F16A|XN--MGBA7C0BBN0A|XN--MGBAAKC7DVF|XN--MGBAAM7A8H|XN--MGBAB2BD|XN--MGBAH1A3HJKRD|XN--MGBAI9AZGQP6J|XN--MGBAYH7GPA|XN--MGBBH1A|XN--MGBBH1A71E|XN--MGBC0A9AZCG|XN--MGBCA7DZDO|XN--MGBCPQ6GPA1A|XN--MGBERP4A5D4AR|XN--MGBGU82A|XN--MGBI4ECEXP|XN--MGBPL2FH|XN--MGBT3DHD|XN--MGBTX2B|XN--MGBX4CD0AB|XN--MIX891F|XN--MK1BU44C|XN--MXTQ1M|XN--NGBC5AZD|XN--NGBE9E0A|XN--NGBRX|XN--NODE|XN--NQV7F|XN--NQV7FS00EMA|XN--NYQY26A|XN--O3CW4H|XN--OGBPF8FL|XN--OTU796D|XN--P1ACF|XN--P1AI|XN--PGBS0DH|XN--PSSY2U|XN--Q7CE6A|XN--Q9JYB4C|XN--QCKA1PMC|XN--QXA6A|XN--QXAM|XN--RHQV96G|XN--ROVU88B|XN--RVC1E0AM3E|XN--S9BRJ9C|XN--SES554G|XN--T60B56A|XN--TCKWE|XN--TIQ49XQYJ|XN--UNUP4Y|XN--VERMGENSBERATER-CTB|XN--VERMGENSBERATUNG-PWB|XN--VHQUV|XN--VUQ861B|XN--W4R85EL8FHU5DNRA|XN--W4RS40L|XN--WGBH1C|XN--WGBL6A|XN--XHQ521B|XN--XKC2AL3HYE2A|XN--XKC2DL3A5EE0H|XN--Y9A3AQ|XN--YFRO4I67O|XN--YGBI2AMMX|XN--ZFR164B|XXX|XYZ|YACHTS|YAHOO|YAMAXUN|YANDEX|YE|YODOBASHI|YOGA|YOKOHAMA|YOU|YOUTUBE|YT|YUN|ZA|ZAPPOS|ZARA|ZERO|ZIP|ZM|ZONE|ZUERICH|ZW)$/i;
+module.exports = regexp;
+
+
+
+================================================
+FILE: test/cert.pem
+================================================
+-----BEGIN CERTIFICATE-----
+MIIBsTCCARoCCQDp0DuED0RAJzANBgkqhkiG9w0BAQsFADAdMRswGQYDVQQDDBJj
+b3JzLWFueXdoZXJlIHRlc3QwHhcNMTUwNTA2MDcyOTM1WhcNMTUwNjA1MDcyOTM1
+WjAdMRswGQYDVQQDDBJjb3JzLWFueXdoZXJlIHRlc3QwgZ8wDQYJKoZIhvcNAQEB
+BQADgY0AMIGJAoGBALzTF5ClJKvkB6h9h7kLORV+mMV3ySDs+oGZn0NgXM+yb9Zh
+69r5e95zZJl/V432LFdy0hkEcVteUkC2REWG8D4COGfiwWsXyZdaP1qqLpDpPAMm
+v6xFHjW6rVuxzfr4GUjE0Zh9Fg2R2SbtCOcHS/LZoDVOqOvn6+urP6XFY4aFAgMB
+AAEwDQYJKoZIhvcNAQELBQADgYEAYXMhS8ouff/c8lSUUs/CLh010cj5RPk/ivS7
+aN2PArzQ6pZvhpgJKf7XAQksBtLYYZMzIpG6W8zhPSbqzly7lELAdE+sxcbbfu8A
+FMjNVFQ2Fm1c8ImX8qpE3nhVrPAiwfPjGBqKHTl730gvbh1XH9TC4O4dZcbEomX3
+5MsxQfc=
+-----END CERTIFICATE-----
+
+
+
+================================================
+FILE: test/child.js
+================================================
+// When this module is loaded, CORS Anywhere is started.
+// Then, a request is generated to warm up the server (just in case).
+// Then the base URL of CORS Anywhere is sent to the parent process.
+// ...
+// When the parent process is done, it sends an empty message to this child
+// process, which in turn records the change in used heap space.
+// The difference in heap space is finally sent back to the parent process.
+// ...
+// The parent process should then kill this child.
+
+process.on('uncaughtException', function(e) {
+  console.error('Uncaught exception in child process: ' + e);
+  console.error(e.stack);
+  process.exit(-1);
+});
+
+// Invoke memoryUsage() without using its result to make sure that any internal
+// datastructures that supports memoryUsage() is initialized and won't pollute
+// the memory usage measurement later on.
+process.memoryUsage();
+
+var heapUsedStart = 0;
+function getMemoryUsage(callback) {
+  // Note: Requires --expose-gc
+  // 6 is the minimum amount of gc() calls before calling gc() again does not
+  // reduce memory any more.
+  for (var i = 0; i < 6; ++i) {
+    global.gc();
+  }
+  callback(process.memoryUsage().heapUsed);
+}
+
+var server;
+if (process.argv.indexOf('use-http-instead-of-cors-anywhere') >= 0) {
+  server = require('http').createServer(function(req, res) { res.end(); });
+} else {
+  server = require('../').createServer();
+}
+
+server.listen(0, function() {
+  // Perform 1 request to warm up.
+  require('http').get({
+    hostname: '127.0.0.1',
+    port: server.address().port,
+    path: '/http://invalid:99999',
+    agent: false,
+  }, function() {
+    notifyParent();
+  });
+
+  function notifyParent() {
+    getMemoryUsage(function(usage) {
+      heapUsedStart = usage;
+      process.send('http://127.0.0.1:' + server.address().port + '/');
+    });
+  }
+});
+
+process.once('message', function() {
+  getMemoryUsage(function(heapUsedEnd) {
+    var delta = heapUsedEnd - heapUsedStart;
+    process.send(delta);
+  });
+});
+
+
+
+================================================
+FILE: test/customHelp.html
+================================================
+<html>
+<head>
+</head>
+<body>
+ <h2>Custom HTML help!!</h2>
+</body>
+</html>
+
+
+================================================
+FILE: test/customHelp.txt
+================================================
+Server is OK!!
+
+
+
+================================================
+FILE: test/dummy.txt
+================================================
+dummy content
+
+
+
+================================================
+FILE: test/key.pem
+================================================
+-----BEGIN RSA PRIVATE KEY-----
+MIICXQIBAAKBgQC80xeQpSSr5AeofYe5CzkVfpjFd8kg7PqBmZ9DYFzPsm/WYeva
++Xvec2SZf1eN9ixXctIZBHFbXlJAtkRFhvA+Ajhn4sFrF8mXWj9aqi6Q6TwDJr+s
+RR41uq1bsc36+BlIxNGYfRYNkdkm7QjnB0vy2aA1Tqjr5+vrqz+lxWOGhQIDAQAB
+AoGBAISy8OelN01Zlowxk/VWTsqtSl3UHdP21uHHfWaTTQZlxzTpYiBknkmp3LQH
+CxfoPidCuSX9ulBUzAdQUFBwUVp8wyPIRjpNyRiD58dLNxG0G+OACqnLxNWqIf6F
+vS3UqrRGIA5u+GSz+0g3DAeVA5JmsAyHQGkJsh3pcuD8/7wNAkEA7MScGfySy9td
+dDBekVU5/GaVg4DA4ELtDNfa99ARB89XP0ps/XrOPEL9yxTjWIHH+qxuhpfG6zGN
+ouxZlvBT9wJBAMwpig4A4JE8M8pBDwMY4213gud8B1grQTbhz5bv51aTaIEQFcxw
+sGfEmAfVToI+kVTrdFggy42YCSMSvwuF4mMCQQDZHkqPwf/TlSwT2i8+UstD28aL
+uswkWvsKZf9UdKbJZKd7UIK1x6HLvRsC2frJNOnvw6PvJMuy7dQWbWqScXxtAkBv
+/5msdO68vbnriiUiHdUliBpXwsKEq7Xq1ZV7x7+wzszVgG106ZzcUAzWvz2CVbCE
+VWZNsi/4TR82DmKff6LhAkBA/xceWaZjxh5dkWkIrMFWd2GFhGlpfwYw7oELwRL8
+RYXzc1Mr2fDdZDgwgjg67JQqIhOQ3E4RGKPgZ+E7Pk3/
+-----END RSA PRIVATE KEY-----
+
+
+
+================================================
+FILE: test/setup.js
+================================================
+var nock = require('nock');
+if (parseInt(process.versions.node, 10) >= 8) {
+  // See DEP0066 at https://nodejs.org/api/deprecations.html.
+  // _headers and _headerNames have been removed from Node v8, which causes
+  // nock <= 9.0.13 to fail. The snippet below monkey-patches the library, see
+  // https://github.com/node-nock/nock/pull/929/commits/f6369d0edd2a172024124f
+  // for the equivalent logic without proxies.
+  Object.defineProperty(require('http').ClientRequest.prototype, '_headers', {
+    get: function() {
+      var request = this;
+      // eslint-disable-next-line no-undef
+      return new Proxy(request.getHeaders(), {
+        set: function(target, property, value) {
+          request.setHeader(property, value);
+          return true;
+        },
+      });
+    },
+    set: function() {
+      // Ignore.
+    },
+  });
+}
+
+nock.enableNetConnect('127.0.0.1');
+
+function echoheaders(origin) {
+  nock(origin)
+    .persist()
+    .get('/echoheaders')
+    .reply(function() {
+      var headers = this.req.headers;
+      var excluded_headers = [
+        'accept-encoding',
+        'user-agent',
+        'connection',
+        // Remove this header since its value is platform-specific.
+        'x-forwarded-for',
+        'test-include-xfwd',
+      ];
+      if (!('test-include-xfwd' in headers)) {
+        excluded_headers.push('x-forwarded-port');
+        excluded_headers.push('x-forwarded-proto');
+      }
+      var response = {};
+      Object.keys(headers).forEach(function(name) {
+        if (excluded_headers.indexOf(name) === -1) {
+          response[name] = headers[name];
+        }
+      });
+      return response;
+    });
+}
+
+nock('http://example.com')
+  .persist()
+  .get('/')
+  .reply(200, 'Response from example.com')
+
+  .post('/echopost')
+  .reply(200, function(uri, requestBody) {
+    return requestBody;
+  })
+
+  .get('/setcookie')
+  .reply(200, '', {
+    'Set-Cookie': 'x',
+    'Set-Cookie2': 'y',
+    'Set-Cookie3': 'z', // This is not a special cookie setting header.
+  })
+
+  .get('/redirecttarget')
+  .reply(200, 'redirect target', {
+    'Some-header': 'value',
+  })
+
+  .head('/redirect')
+  .reply(302, '', {
+    Location: '/redirecttarget',
+  })
+
+  .get('/redirect')
+  .reply(302, 'redirecting...', {
+    'header at redirect': 'should not be here',
+    Location: '/redirecttarget',
+  })
+
+  .get('/redirectposttarget')
+  .reply(200, 'post target')
+
+  .post('/redirectposttarget')
+  .reply(200, 'post target (POST)')
+
+  .post('/redirectpost')
+  .reply(302, 'redirecting...', {
+    Location: '/redirectposttarget',
+  })
+
+  .post('/redirect307')
+  .reply(307, 'redirecting...', {
+    Location: '/redirectposttarget',
+  })
+
+  .get('/redirect2redirect')
+  .reply(302, 'redirecting to redirect...', {
+    Location: '/redirect',
+  })
+
+  .get('/redirectloop')
+  .reply(302, 'redirecting ad infinitum...', {
+    Location: '/redirectloop',
+  })
+
+  .get('/redirectwithoutlocation')
+  .reply(302, 'maybe found')
+
+  .get('/redirectinvalidlocation')
+  .reply(302, 'redirecting to junk...', {
+    Location: 'http:///',
+  })
+
+  .get('/proxyerror')
+  .replyWithError('throw node')
+;
+
+nock('https://example.com')
+  .persist()
+  .get('/')
+  .reply(200, 'Response from https://example.com')
+;
+
+nock('http://example.com.com')
+  .persist()
+  .get('/')
+  .reply(200, 'Response from example.com.com')
+;
+
+nock('http://example.com:1234')
+  .persist()
+  .get('/')
+  .reply(200, 'Response from example.com:1234')
+;
+
+nock('http://prefix.example.com')
+  .persist()
+  .get('/')
+  .reply(200, 'Response from prefix.example.com')
+;
+
+echoheaders('http://example.com');
+echoheaders('http://example.com:1337');
+echoheaders('https://example.com');
+echoheaders('https://example.com:1337');
+
+nock('http://robots.txt')
+  .get('/')
+  .reply(200, 'this is http://robots.txt');
+
+
+
+================================================
+FILE: test/test-examples.js
+================================================
+/**
+ * CORS Anywhere is designed for use as a standalone server. Sometimes you want
+ * to have extra functionality on top of the default CORS server. If it may be
+ * useful to others, please open a feature request on the issue tracker at
+ * https://github.com/Rob--W/cors-anywhere/issues.
+ *
+ * If it is only useful to your application, look below for some examples.
+ * These examples are provided as-is without guarantees. Use at your own risk.
+ */
+
+/* eslint-env mocha */
+require('./setup');
+
+var createServer = require('../').createServer;
+var assert = require('assert');
+var request = require('supertest');
+
+var http = require('http');
+
+describe('Examples', function() {
+  // Note: In the examples below we don't listen on any port after calling
+  // createServer() because it is not needed to start listening on a port if the
+  // CORS Anywhere is only used internally.
+
+  // And normally you have to listen on some port, like this:
+  //
+  //     http_server.listen(port_number);
+  //
+  // But in these test, the call to request() automatically handles that part so
+  // the examples don't have an explicit .listen() call.
+
+  it('Rewrite proxy URL', function(done) {
+    var cors_anywhere = createServer();
+
+    var http_server = http.createServer(function(req, res) {
+      // For testing, check whether req.url is the same as what we input below.
+      assert.strictEqual(req.url, '/dummy-for-testing');
+
+      // Basic example: Always proxy example.com.
+      req.url = '/http://example.com';
+
+      cors_anywhere.emit('request', req, res);
+    });
+
+    request(http_server)
+      .get('/dummy-for-testing')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('Transform response to uppercase (streaming)', function(done) {
+    var cors_anywhere = createServer();
+
+    var http_server = http.createServer(function(req, res) {
+      var originalWrite = res.write;
+
+      res.write = function(data, encoding, callback) {
+        if (Buffer.isBuffer(data)) {
+          data = data.toString();
+        }
+
+        assert.strictEqual(typeof data, 'string');
+
+        // This example shows how to transform the response to upper case.
+        data = data.toUpperCase();
+
+        originalWrite.call(this, data, encoding, callback);
+      };
+
+      cors_anywhere.emit('request', req, res);
+    });
+
+    request(http_server)
+      .get('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'RESPONSE FROM EXAMPLE.COM', done);
+  });
+
+  it('Transform response to uppercase (buffered)', function(done) {
+    var cors_anywhere = createServer();
+
+    var http_server = http.createServer(function(req, res) {
+      var originalWrite = res.write;
+      var originalEnd = res.end;
+
+      var buffers = [];
+
+      res.write = function(data, encoding, callback) {
+        assert.ok(Buffer.isBuffer(data) || typeof data === 'string');
+
+        buffers.push(data);
+        if (callback) {
+          process.nextTick(callback, null);
+        }
+      };
+      res.end = function(data, encoding, callback) {
+        if (data) {
+          this.write(data, encoding);
+        }
+
+        // After calling .end(), .write shouldn't be called any more. So let's
+        // restore it so that the default error handling for writing to closed
+        // streams would occur.
+        this.write = originalWrite;
+
+        // Combine all chunks. Note that we're assuming that all chunks are
+        // utf8 strings or buffers whose content is utf8-encoded. If this
+        // assumption is not true, then you have to update the .write method
+        // above.
+        data = buffers.join('');
+
+        // This example shows how to transform the response to upper case.
+        data = data.toUpperCase();
+
+        // .end should be called once, so let's restore it so that any default
+        // error handling occurs if it occurs again.
+        this.end = originalEnd;
+        this.end(data, 'utf8', callback);
+      };
+
+      cors_anywhere.emit('request', req, res);
+    });
+
+    request(http_server)
+      .get('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'RESPONSE FROM EXAMPLE.COM', done);
+  });
+});
+
+
+
+
+================================================
+FILE: test/test-memory.js
+================================================
+/* eslint-env mocha */
+// Run this specific test using:
+// npm test -- -f memory
+var http = require('http');
+var path = require('path');
+var url = require('url');
+var fork = require('child_process').fork;
+
+describe('memory usage', function() {
+  var cors_api_url;
+
+  var server;
+  var cors_anywhere_child;
+  before(function(done) {
+    server = http.createServer(function(req, res) {
+      res.writeHead(200);
+      res.end();
+    }).listen(0, function() {
+      done();
+    });
+  });
+
+  after(function(done) {
+    server.close(function() {
+      done();
+    });
+  });
+
+  beforeEach(function(done) {
+    var cors_module_path = path.join(__dirname, 'child');
+    var args = [];
+    // Uncomment this if you want to compare the performance of CORS Anywhere
+    // with the standard no-op http module.
+    // args.push('use-http-instead-of-cors-anywhere');
+    var nodeOptionsArgs = ['--expose-gc'];
+    var nodeMajorV = parseInt(process.versions.node, 10);
+    // Node 11.3.0+, 10.14.0+, 8.14.0+, 6.15.0+ restrict header sizes
+    // (CVE-2018-12121), and need to be passed the --max-http-header-size flag
+    // to not reject large headers.
+    if (nodeMajorV >= 11 ||
+        nodeMajorV === 10 ||
+        nodeMajorV === 8 ||
+        nodeMajorV === 6) {
+      nodeOptionsArgs.push('--max-http-header-size=60000');
+    }
+    cors_anywhere_child = fork(cors_module_path, args, {
+      execArgv: nodeOptionsArgs,
+    });
+    cors_anywhere_child.once('message', function(cors_url) {
+      cors_api_url = cors_url;
+      done();
+    });
+  });
+
+  afterEach(function() {
+    cors_anywhere_child.kill();
+  });
+
+  /**
+   * Perform N CORS Anywhere proxy requests to a simple test server.
+   *
+   * @param {number} n - number of repetitions.
+   * @param {number} requestSize - Approximate size of request in kilobytes.
+   * @param {number} memMax - Expected maximum memory usage in kilobytes.
+   * @param {function} done - Upon success, called without arguments.
+   *   Upon failure, called with the error as parameter.
+   */
+  function performNRequests(n, requestSize, memMax, done) {
+    var remaining = n;
+    var request = url.parse(
+        cors_api_url + 'http://127.0.0.1:' + server.address().port);
+    request.agent = false; // Force Connection: Close
+    request.headers = {
+      'Long-header': new Array(requestSize * 1e3).join('x'),
+    };
+    (function requestAgain() {
+      if (remaining-- === 0) {
+        cors_anywhere_child.once('message', function(memory_usage_delta) {
+          console.log('Memory usage delta: ' + memory_usage_delta +
+              ' (' + n + ' requests of ' + requestSize + ' kb each)');
+          if (memory_usage_delta > memMax * 1e3) {
+            // Note: Even if this error is reached, always profile (e.g. using
+            // node-inspector) whether it is a true leak, and not e.g. noise
+            // caused by the implementation of V8/Node.js.
+            // Uncomment args.push('use-http-instead-of-cors-anywhere') at the
+            // fork() call to get a sense of what's normal.
+            throw new Error('Possible memory leak: ' + memory_usage_delta +
+                ' bytes was not released, which exceeds the ' + memMax +
+                ' kb limit by ' +
+                Math.round(memory_usage_delta / memMax / 10 - 100) + '%.');
+          }
+          done();
+        });
+        cors_anywhere_child.send(null);
+        return;
+      }
+      http.request(request, function() {
+        requestAgain();
+      }).on('error', function(error) {
+        done(error);
+      }).end();
+    })();
+  }
+
+  it('100 GET requests 50k', function(done) {
+    // This test is just for comparison with the following tests.
+    performNRequests(100, 50, 1200, done);
+  });
+
+  // 100x 1k and 100x 50k for comparison.
+  // Both should use about the same amount of memory if there is no leak.
+  it('1000 GET requests 1k', function(done) {
+    // Every request should complete within 10ms.
+    this.timeout(1000 * 10);
+    performNRequests(1000, 1, 2000, done);
+  });
+  it('1000 GET requests 50k', function(done) {
+    // Every request should complete within 10ms.
+    this.timeout(1000 * 10);
+    performNRequests(1000, 50, 2000, done);
+  });
+});
+
+
+
+================================================
+FILE: test/test-ratelimit.js
+================================================
+/* eslint-env mocha */
+
+var createRateLimitChecker = require('../lib/rate-limit');
+
+var lolex = require('lolex');
+var assert = require('assert');
+
+function assertNotLimited(rateLimitReturnValue) {
+  if (rateLimitReturnValue) {
+    assert.fail('Expected no limit, but got ' + rateLimitReturnValue);
+  }
+}
+
+function assertLimited(rateLimitReturnValue, limit, period) {
+  var msg;
+  if (period === 1) {
+    msg = 'The number of requests is limited to ' + limit + ' per minute. ';
+  } else {
+    msg = 'The number of requests is limited to ' + limit + ' per ' + period + ' minutes. ';
+  }
+  msg += 'Please self-host CORS Anywhere if you need more quota. ' +
+    'See https://github.com/Rob--W/cors-anywhere#demo-server';
+  assert.equal(rateLimitReturnValue, msg);
+}
+
+describe('Rate limit', function() {
+  var clock;
+  beforeEach(function() {
+    clock = lolex.install();
+  });
+  afterEach(function() {
+    clock.uninstall();
+  });
+  it('is unlimited by default', function() {
+    var checkRateLimit = createRateLimitChecker();
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('https://example.com'));
+    assertNotLimited(checkRateLimit('https://example.com:1234'));
+
+    checkRateLimit = createRateLimitChecker('');
+    assertNotLimited(checkRateLimit('http://example.com'));
+
+    checkRateLimit = createRateLimitChecker(' ');
+    assertNotLimited(checkRateLimit('http://example.com'));
+  });
+
+  it('zero per minute / 5 minutes', function() {
+    var checkRateLimit = createRateLimitChecker('0 1');
+    assertLimited(checkRateLimit('http://example.com'), 0, 1);
+    assertLimited(checkRateLimit('https://example.com'), 0, 1);
+
+    checkRateLimit = createRateLimitChecker('0 5');
+    assertLimited(checkRateLimit('http://example.com'), 0, 5);
+    assertLimited(checkRateLimit('https://example.com'), 0, 5);
+  });
+
+  it('one per minute', function() {
+    var checkRateLimit = createRateLimitChecker('1 1');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertLimited(checkRateLimit('http://example.com'), 1, 1);
+    assertNotLimited(checkRateLimit('http://example.com:1234'));
+    assertLimited(checkRateLimit('http://example.com:1234'), 1, 1);
+
+    clock.tick(59000);
+    assertLimited(checkRateLimit('http://example.com'), 1, 1);
+
+    clock.tick(1000);
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertLimited(checkRateLimit('http://example.com'), 1, 1);
+    assertNotLimited(checkRateLimit('http://example.com:1234'));
+    assertLimited(checkRateLimit('http://example.com:1234'), 1, 1);
+  });
+
+  it('different domains, one per minute', function() {
+    var checkRateLimit = createRateLimitChecker('1 1');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://example.net'));
+    assertNotLimited(checkRateLimit('http://wexample.net'));
+    assertNotLimited(checkRateLimit('http://xample.net'));
+    assertNotLimited(checkRateLimit('http://www.example.net'));
+    assertLimited(checkRateLimit('http://example.com'), 1, 1);
+    assertLimited(checkRateLimit('http://example.net'), 1, 1);
+    assertLimited(checkRateLimit('http://wexample.net'), 1, 1);
+    assertLimited(checkRateLimit('http://xample.net'), 1, 1);
+    assertLimited(checkRateLimit('http://www.example.net'), 1, 1);
+
+    clock.tick(60000); // 1 minute
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://example.net'));
+    assertNotLimited(checkRateLimit('http://wexample.net'));
+    assertNotLimited(checkRateLimit('http://xample.net'));
+    assertNotLimited(checkRateLimit('http://www.example.net'));
+  });
+
+  it('unlimited domains, string', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 example.com');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://example.com'));
+
+    assertNotLimited(checkRateLimit('http://wexample.com'));
+    assertNotLimited(checkRateLimit('http://xample.com'));
+    assertNotLimited(checkRateLimit('http://www.example.com'));
+    assertLimited(checkRateLimit('http://wexample.com'), 1, 2);
+    assertLimited(checkRateLimit('http://xample.com'), 1, 2);
+    assertLimited(checkRateLimit('http://www.example.com'), 1, 2);
+  });
+
+  it('unlimited domains, RegExp', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 /example\\.com/');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://example.com'));
+
+    assertNotLimited(checkRateLimit('http://wexample.com'));
+    assertNotLimited(checkRateLimit('http://xample.com'));
+    assertNotLimited(checkRateLimit('http://www.example.com'));
+    assertLimited(checkRateLimit('http://wexample.com'), 1, 2);
+    assertLimited(checkRateLimit('http://xample.com'), 1, 2);
+    assertLimited(checkRateLimit('http://www.example.com'), 1, 2);
+  });
+
+  it('multiple domains, string', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 a b  cc ');
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://cc'));
+    assertNotLimited(checkRateLimit('http://cc'));
+    assertNotLimited(checkRateLimit('http://c'));
+    assertLimited(checkRateLimit('http://c'), 1, 2);
+  });
+
+  it('multiple domains, RegExp', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 /a/ /b/  /cc/ ');
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://cc'));
+    assertNotLimited(checkRateLimit('http://cc'));
+    assertNotLimited(checkRateLimit('http://ccc'));
+    assertLimited(checkRateLimit('http://ccc'), 1, 2);
+  });
+
+  it('multiple domains, string and RegExp', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 a /b/');
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://ab'));
+    assertLimited(checkRateLimit('http://ab'), 1, 2);
+  });
+
+  it('multiple domains, RegExp and string', function() {
+    var checkRateLimit = createRateLimitChecker('1 2 /a/ b');
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://a'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://b'));
+    assertNotLimited(checkRateLimit('http://ab'));
+    assertLimited(checkRateLimit('http://ab'), 1, 2);
+  });
+
+  it('wildcard subdomains', function() {
+    var checkRateLimit = createRateLimitChecker('0 1 /(.*\\.)?example\\.com/');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://www.example.com'));
+    assertLimited(checkRateLimit('http://xexample.com'), 0, 1);
+    assertLimited(checkRateLimit('http://example.com.br'), 0, 1);
+  });
+
+  it('wildcard ports', function() {
+    var checkRateLimit = createRateLimitChecker('0 1 /example\\.com(:\\d{1,5})?/');
+    assertNotLimited(checkRateLimit('http://example.com'));
+    assertNotLimited(checkRateLimit('http://example.com:1234'));
+  });
+
+  it('empty host', function() {
+    var checkRateLimit = createRateLimitChecker('0 1');
+    assertLimited(checkRateLimit(''), 0, 1);
+    // Empty host actually means empty origin. But let's also test for 'http://'.
+    assertLimited(checkRateLimit('http://'), 0, 1);
+
+    checkRateLimit = createRateLimitChecker('0 1    ');
+    assertLimited(checkRateLimit(''), 0, 1);
+    assertLimited(checkRateLimit('http://'), 0, 1);
+
+    checkRateLimit = createRateLimitChecker('0 1 //');
+    assertNotLimited(checkRateLimit(''));
+    assertNotLimited(checkRateLimit('http://'));
+  });
+
+  it('null origin', function() {
+    var checkRateLimit = createRateLimitChecker('0 1');
+    assertLimited(checkRateLimit('null'), 0, 1);
+    assertLimited(checkRateLimit('http://null'), 0, 1);
+
+    checkRateLimit = createRateLimitChecker('0 1 null');
+    assertNotLimited(checkRateLimit('null'));
+    assertNotLimited(checkRateLimit('http://null'));
+
+    checkRateLimit = createRateLimitChecker('0 1 /null/');
+    assertNotLimited(checkRateLimit('null'));
+    assertNotLimited(checkRateLimit('http://null'));
+  });
+
+  it('case-insensitive', function() {
+    var checkRateLimit = createRateLimitChecker('0 1 NULL');
+    assertNotLimited(checkRateLimit('null'));
+    assertNotLimited(checkRateLimit('http://null'));
+
+    checkRateLimit = createRateLimitChecker('0 1 /NULL/');
+    assertNotLimited(checkRateLimit('null'));
+    assertNotLimited(checkRateLimit('http://null'));
+  });
+
+  it('bad input', function() {
+    assert.throws(function() {
+      createRateLimitChecker('0 1 /');
+    }, /Invalid CORSANYWHERE_RATELIMIT\. Regex at index 0 must start and end with a slash \("\/"\)\./);
+
+    assert.throws(function() {
+      createRateLimitChecker('0 1 a /');
+    }, /Invalid CORSANYWHERE_RATELIMIT\. Regex at index 1 must start and end with a slash \("\/"\)\./);
+
+    assert.throws(function() {
+      createRateLimitChecker('0 1 /(/');
+    }, /Invalid regular expression/);
+  });
+});
+
+
+
+================================================
+FILE: test/test.js
+================================================
+/* eslint-env mocha */
+require('./setup');
+
+var createServer = require('../').createServer;
+var request = require('supertest');
+var path = require('path');
+var http = require('http');
+var https = require('https');
+var fs = require('fs');
+var assert = require('assert');
+
+var helpTextPath = path.join(__dirname, '../lib/help.txt');
+var helpText = fs.readFileSync(helpTextPath, {encoding: 'utf8'});
+
+request.Test.prototype.expectJSON = function(json, done) {
+  this.expect(function(res) {
+    // Assume that the response can be parsed as JSON (otherwise it throws).
+    var actual = JSON.parse(res.text);
+    assert.deepEqual(actual, json);
+  });
+  return done ? this.end(done) : this;
+};
+
+request.Test.prototype.expectNoHeader = function(header, done) {
+  this.expect(function(res) {
+    if (header.toLowerCase() in res.headers) {
+      return new Error('Unexpected header in response: ' + header);
+    }
+  });
+  return done ? this.end(done) : this;
+};
+
+var cors_anywhere;
+var cors_anywhere_port;
+function stopServer(done) {
+  cors_anywhere.close(function() {
+    done();
+  });
+  cors_anywhere = null;
+}
+
+describe('Basic functionality', function() {
+  before(function() {
+    cors_anywhere = createServer();
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /', function(done) {
+    request(cors_anywhere)
+      .get('/')
+      .type('text/plain')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /iscorsneeded', function(done) {
+    request(cors_anywhere)
+      .get('/iscorsneeded')
+      .expectNoHeader('access-control-allow-origin', done);
+  });
+
+  it('GET /example.com:65536', function(done) {
+    request(cors_anywhere)
+      .get('/example.com:65536')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(400, 'Port number too large: 65536', done);
+  });
+
+  it('GET /favicon.ico', function(done) {
+    request(cors_anywhere)
+      .get('/favicon.ico')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(404, 'Invalid host: favicon.ico', done);
+  });
+
+  it('GET /robots.txt', function(done) {
+    request(cors_anywhere)
+      .get('/robots.txt')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(404, 'Invalid host: robots.txt', done);
+  });
+
+  it('GET /http://robots.txt should be proxied', function(done) {
+    request(cors_anywhere)
+      .get('/http://robots.txt')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'this is http://robots.txt', done);
+  });
+
+  it('GET /example.com', function(done) {
+    request(cors_anywhere)
+      .get('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /example.com:80', function(done) {
+    request(cors_anywhere)
+      .get('/example.com:80')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com:80/')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /example.com:443', function(done) {
+    request(cors_anywhere)
+      .get('/example.com:443')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'https://example.com:443/')
+      .expect(200, 'Response from https://example.com', done);
+  });
+
+  it('GET //example.com', function(done) {
+    // '/example.com' is an invalid URL.
+    request(cors_anywhere)
+      .get('//example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /http://:1234', function(done) {
+    // 'http://:1234' is an invalid URL.
+    request(cors_anywhere)
+      .get('/http://:1234')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /http:///', function(done) {
+    // 'http://:1234' is an invalid URL.
+    request(cors_anywhere)
+      .get('/http:///')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /http:/notenoughslashes', function(done) {
+    // 'http:/notenoughslashes' is an invalid URL.
+    request(cors_anywhere)
+      .get('/http:/notenoughslashes')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(400, 'The URL is invalid: two slashes are needed after the http(s):.', done);
+  });
+
+
+  it('GET ///example.com', function(done) {
+    // API base URL (with trailing slash) + '//example.com'
+    request(cors_anywhere)
+      .get('///example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /http://example.com', function(done) {
+    request(cors_anywhere)
+      .get('/http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('POST plain text', function(done) {
+    request(cors_anywhere)
+      .post('/example.com/echopost')
+      .send('{"this is a request body & should not be mangled":1.00}')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('{"this is a request body & should not be mangled":1.00}', done);
+  });
+
+  it('POST file', function(done) {
+    request(cors_anywhere)
+      .post('/example.com/echopost')
+      .attach('file', path.join(__dirname, 'dummy.txt'))
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(/\r\nContent-Disposition: form-data; name="file"; filename="dummy.txt"\r\nContent-Type: text\/plain\r\n\r\ndummy content\n\r\n/, done); // eslint-disable-line max-len
+  });
+
+  it('HEAD with redirect should be followed', function(done) {
+    // Redirects are automatically followed, because redirects are to be
+    // followed automatically per specification regardless of the HTTP verb.
+    request(cors_anywhere)
+      .head('/example.com/redirect')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('some-header', 'value')
+      .expect('x-request-url', 'http://example.com/redirect')
+      .expect('x-cors-redirect-1', '302 http://example.com/redirecttarget')
+      .expect('x-final-url', 'http://example.com/redirecttarget')
+      .expect('access-control-expose-headers', /some-header,x-final-url/)
+      .expectNoHeader('header at redirect')
+      .expect(200, undefined, done);
+  });
+
+  it('GET with redirect should be followed', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/redirect')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('some-header', 'value')
+      .expect('x-request-url', 'http://example.com/redirect')
+      .expect('x-cors-redirect-1', '302 http://example.com/redirecttarget')
+      .expect('x-final-url', 'http://example.com/redirecttarget')
+      .expect('access-control-expose-headers', /some-header,x-final-url/)
+      .expectNoHeader('header at redirect')
+      .expect(200, 'redirect target', done);
+  });
+
+  it('GET with redirect loop should interrupt', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/redirectloop')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/redirectloop')
+      .expect('x-cors-redirect-1', '302 http://example.com/redirectloop')
+      .expect('x-cors-redirect-2', '302 http://example.com/redirectloop')
+      .expect('x-cors-redirect-3', '302 http://example.com/redirectloop')
+      .expect('x-cors-redirect-4', '302 http://example.com/redirectloop')
+      .expect('x-cors-redirect-5', '302 http://example.com/redirectloop')
+      .expect('Location', /^http:\/\/127.0.0.1:\d+\/http:\/\/example.com\/redirectloop$/)
+      .expect(302, 'redirecting ad infinitum...', done);
+  });
+
+  it('POST with 302 redirect should be followed', function(done) {
+    request(cors_anywhere)
+      .post('/example.com/redirectpost')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/redirectpost')
+      .expect('x-cors-redirect-1', '302 http://example.com/redirectposttarget')
+      .expect('x-final-url', 'http://example.com/redirectposttarget')
+      .expect('access-control-expose-headers', /x-final-url/)
+      .expect(200, 'post target', done);
+  });
+
+  it('GET with 302 redirect without Location header should not be followed', function(done) {
+    // There is nothing to follow, so let the browser decide what to do with it.
+    request(cors_anywhere)
+      .get('/example.com/redirectwithoutlocation')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/redirectwithoutlocation')
+      .expect('x-final-url', 'http://example.com/redirectwithoutlocation')
+      .expect('access-control-expose-headers', /x-final-url/)
+      .expect(302, 'maybe found', done);
+  });
+
+  it('GET with 302 redirect to an invalid Location should not be followed', function(done) {
+    // There is nothing to follow, so let the browser decide what to do with it.
+    request(cors_anywhere)
+      .get('/example.com/redirectinvalidlocation')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/redirectinvalidlocation')
+      .expect('x-final-url', 'http://example.com/redirectinvalidlocation')
+      .expect('access-control-expose-headers', /x-final-url/)
+      .expect('Location', 'http:///')
+      .expect(302, 'redirecting to junk...', done);
+  });
+
+  it('POST with 307 redirect should not be handled', function(done) {
+    // Because of implementation difficulties (having to keep the request body
+    // in memory), handling HTTP 307/308 redirects is deferred to the requestor.
+    request(cors_anywhere)
+      .post('/example.com/redirect307')
+      .redirects(0)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('x-request-url', 'http://example.com/redirect307')
+      .expect('Location', /^http:\/\/127.0.0.1:\d+\/http:\/\/example.com\/redirectposttarget$/)
+      .expect('x-final-url', 'http://example.com/redirect307')
+      .expect('access-control-expose-headers', /x-final-url/)
+      .expect(307, 'redirecting...', done);
+  });
+
+  it('OPTIONS /', function(done) {
+    request(cors_anywhere)
+      .options('/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, '', done);
+  });
+
+  it('OPTIONS / with Access-Control-Request-Method / -Headers', function(done) {
+    request(cors_anywhere)
+      .options('/')
+      .set('Access-Control-Request-Method', 'DELETE')
+      .set('Access-Control-Request-Headers', 'X-Tralala')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Access-Control-Allow-Methods', 'DELETE')
+      .expect('Access-Control-Allow-Headers', 'X-Tralala')
+      .expect(200, '', done);
+  });
+
+  it('OPTIONS //bogus', function(done) {
+    // The preflight request always succeeds, regardless of whether the request
+    // is valid.
+    request(cors_anywhere)
+      .options('//bogus')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, '', done);
+  });
+
+  it('X-Forwarded-* headers', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'http',
+      }, done);
+  });
+
+  it('X-Forwarded-* headers (non-standard port)', function(done) {
+    request(cors_anywhere)
+      .get('/example.com:1337/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com:1337',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'http',
+      }, done);
+  });
+
+  it('X-Forwarded-* headers (https)', function(done) {
+    request(cors_anywhere)
+      .get('/https://example.com/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'http',
+      }, done);
+  });
+
+  it('Ignore cookies', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/setcookie')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Set-Cookie3', 'z')
+      .expectNoHeader('set-cookie')
+      .expectNoHeader('set-cookie2', done);
+  });
+});
+
+describe('Proxy errors', function() {
+  before(function() {
+    cors_anywhere = createServer();
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  var bad_http_server;
+  var bad_http_server_url;
+  before(function() {
+    bad_http_server = http.createServer(function(req, res) {
+      res.writeHead(418, {
+        'Content-Length': 'Not a digit',
+      });
+      res.end('This response has an invalid Content-Length header.');
+    });
+    bad_http_server_url = 'http://127.0.0.1:' + bad_http_server.listen(0).address().port;
+  });
+  after(function(done) {
+    bad_http_server.close(function() {
+      done();
+    });
+  });
+
+  var bad_status_http_server;
+  var bad_status_http_server_url;
+  before(function() {
+    bad_status_http_server = require('net').createServer(function(socket) {
+      socket.setEncoding('utf-8');
+      socket.on('data', function(data) {
+        if (data.indexOf('\r\n') >= 0) {
+          // Assume end of headers.
+          socket.write('HTTP/1.0 0\r\n');
+          socket.write('Content-Length: 0\r\n');
+          socket.end('\r\n');
+        }
+      });
+    });
+    bad_status_http_server_url = 'http://127.0.0.1:' + bad_status_http_server.listen(0).address().port;
+  });
+  after(function(done) {
+    bad_status_http_server.close(function() {
+      done();
+    });
+  });
+
+  var bad_tcp_server;
+  var bad_tcp_server_url;
+  before(function() {
+    bad_tcp_server = require('net').createServer(function(socket) {
+      socket.setEncoding('utf-8');
+      socket.on('data', function(data) {
+        if (data.indexOf('\r\n') >= 0) {
+          // Assume end of headers.
+          socket.write('HTTP/1.1 418 OK\r\n');
+          socket.write('Transfer-Encoding: chunked\r\n');
+          socket.write('\r\n');
+          socket.end('JK I lied, this is NOT a chunked response!');
+        }
+      });
+    });
+    bad_tcp_server_url = 'http://127.0.0.1:' + bad_tcp_server.listen(0).address().port;
+  });
+  after(function(done) {
+    bad_tcp_server.close(function() {
+      done();
+    });
+  });
+
+  it('Proxy error', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/proxyerror')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(404, 'Not found because of proxy error: Error: throw node', done);
+  });
+
+  it('Content-Length mismatch', function(done) {
+    var errorMessage = 'Error: Parse Error: Invalid character in Content-Length';
+    // <13.0.0: https://github.com/nodejs/node/commit/ba565a37349e81c9d2402b0c8ef05ab39dca8968
+    // <12.7.0: https://github.com/nodejs/node/pull/28817
+    var nodev = process.versions.node.split('.').map(function(v) { return parseInt(v); });
+    if (nodev[0] < 12 ||
+        nodev[0] === 12 && nodev[1] < 7) {
+      errorMessage = 'Error: Parse Error';
+    }
+    request(cors_anywhere)
+      .get('/' + bad_http_server_url)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(404, 'Not found because of proxy error: ' + errorMessage, done);
+  });
+
+  it('Invalid HTTP status code', function(done) {
+    // Strict HTTP status validation was introduced in Node 4.5.5+, 5.11.0+.
+    // https://github.com/nodejs/node/pull/6291
+    var nodev = process.versions.node.split('.').map(function(v) { return parseInt(v); });
+    if (nodev[0] < 4 ||
+        nodev[0] === 4 && nodev[1] < 5 ||
+        nodev[0] === 4 && nodev[1] === 5 && nodev[2] < 5 ||
+        nodev[0] === 5 && nodev[1] < 11) {
+      this.skip();
+    }
+
+    var errorMessage = 'RangeError [ERR_HTTP_INVALID_STATUS_CODE]: Invalid status code: 0';
+    if (parseInt(process.versions.node, 10) < 9) {
+      errorMessage = 'RangeError: Invalid status code: 0';
+    }
+    request(cors_anywhere)
+      .get('/' + bad_status_http_server_url)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(404, 'Not found because of proxy error: ' + errorMessage, done);
+  });
+
+  it('Content-Encoding invalid body', function(done) {
+    // The HTTP status can't be changed because the headers have already been
+    // sent.
+    request(cors_anywhere)
+      .get('/' + bad_tcp_server_url)
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(418, '', done);
+  });
+
+  it('Invalid header values', function(done) {
+    if (parseInt(process.versions.node, 10) < 6) {
+      // >=6.0.0: https://github.com/nodejs/node/commit/7bef1b790727430cb82bf8be80cfe058480de100
+      this.skip();
+    }
+    // >=9.0.0: https://github.com/nodejs/node/commit/11a2ca29babcb35132e7d93244b69c544d52dfe4
+    var errorMessage = 'TypeError [ERR_INVALID_CHAR]: Invalid character in header content ["headername"]';
+    if (parseInt(process.versions.node, 10) < 9) {
+      // >=6.0.0, <9.0.0: https://github.com/nodejs/node/commit/7bef1b790727430cb82bf8be80cfe058480de100
+      errorMessage = 'TypeError: The header content contains invalid characters';
+    }
+    stopServer(function() {
+      cors_anywhere = createServer({
+        // Setting an invalid header below in request(...).set(...) would trigger
+        // a header validation error in superagent. So we use setHeaders to test
+        // the attempt to proxy a request with invalid request headers.
+        setHeaders: {headername: 'invalid\x01value'},
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/' + bad_tcp_server_url) // Any URL that isn't intercepted by Nock would do.
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(404, 'Not found because of proxy error: ' + errorMessage, done);
+    });
+  });
+});
+
+describe('server on https', function() {
+  var NODE_TLS_REJECT_UNAUTHORIZED;
+  before(function() {
+    cors_anywhere = createServer({
+      httpsOptions: {
+        key: fs.readFileSync(path.join(__dirname, 'key.pem')),
+        cert: fs.readFileSync(path.join(__dirname, 'cert.pem')),
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    // Disable certificate validation in case the certificate expires.
+    NODE_TLS_REJECT_UNAUTHORIZED = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  });
+  after(function(done) {
+    if (NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = NODE_TLS_REJECT_UNAUTHORIZED;
+    }
+    stopServer(done);
+  });
+
+  it('X-Forwarded-* headers (http)', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'https',
+      }, done);
+  });
+
+  it('X-Forwarded-* headers (https)', function(done) {
+    request(cors_anywhere)
+      .get('/https://example.com/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'https',
+      }, done);
+  });
+
+  it('X-Forwarded-* headers (https, non-standard port)', function(done) {
+    request(cors_anywhere)
+      .get('/https://example.com:1337/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com:1337',
+        'x-forwarded-port': String(cors_anywhere_port),
+        'x-forwarded-proto': 'https',
+      }, done);
+  });
+});
+
+describe('NODE_TLS_REJECT_UNAUTHORIZED', function() {
+  var NODE_TLS_REJECT_UNAUTHORIZED;
+  var bad_https_server;
+  var bad_https_server_port;
+
+  var certErrorMessage = 'Error: certificate has expired';
+  // <0.11.11: https://github.com/nodejs/node/commit/262a752c2943842df7babdf55a034beca68794cd
+  if (/^0\.(?!11\.1[1-4]|12\.)/.test(process.versions.node)) {
+    certErrorMessage = 'Error: CERT_HAS_EXPIRED';
+  }
+
+  before(function() {
+    cors_anywhere = createServer({});
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(function(done) {
+    stopServer(done);
+  });
+
+  before(function() {
+    bad_https_server = https.createServer({
+      // rejectUnauthorized: false,
+      key: fs.readFileSync(path.join(__dirname, 'key.pem')),
+      cert: fs.readFileSync(path.join(__dirname, 'cert.pem')),
+    }, function(req, res) {
+      res.end('Response from server with expired cert');
+    });
+    bad_https_server_port = bad_https_server.listen(0).address().port;
+
+    NODE_TLS_REJECT_UNAUTHORIZED = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  });
+  after(function(done) {
+    if (NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = NODE_TLS_REJECT_UNAUTHORIZED;
+    }
+    bad_https_server.close(function() {
+      done();
+    });
+  });
+
+  it('respects certificate errors by default', function(done) {
+    // Test is expected to run without NODE_TLS_REJECT_UNAUTHORIZED=0
+    request(cors_anywhere)
+      .get('/https://127.0.0.1:' + bad_https_server_port)
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Not found because of proxy error: ' + certErrorMessage, done);
+  });
+
+  it('ignore certificate errors via NODE_TLS_REJECT_UNAUTHORIZED=0', function(done) {
+    stopServer(function() {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+      cors_anywhere = createServer({});
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/https://127.0.0.1:' + bad_https_server_port)
+        .set('test-include-xfwd', '')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect('Response from server with expired cert', done);
+    });
+  });
+
+  it('respects certificate errors when httpProxyOptions.secure=true', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        httpProxyOptions: {
+          secure: true,
+        },
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/https://127.0.0.1:' + bad_https_server_port)
+        .set('test-include-xfwd', '')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect('Not found because of proxy error: ' + certErrorMessage, done);
+    });
+  });
+});
+
+describe('originBlacklist', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      originBlacklist: ['http://denied.origin.test'],
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com with denied origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://denied.origin.test')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(403, done);
+  });
+
+  it('GET /example.com without denied origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'https://denied.origin.test') // Note: different scheme!
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+
+  it('GET /example.com without origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+});
+
+describe('originWhitelist', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      originWhitelist: ['https://permitted.origin.test'],
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com with permitted origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'https://permitted.origin.test')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+
+  it('GET /example.com without permitted origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://permitted.origin.test') // Note: different scheme!
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(403, done);
+  });
+
+  it('GET /example.com without origin', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(403, done);
+  });
+});
+
+describe('handleInitialRequest', function() {
+  afterEach(stopServer);
+
+  it('GET / with handleInitialRequest', function(done) {
+    cors_anywhere = createServer({
+      handleInitialRequest: function(req, res, location) {
+        res.writeHead(419);
+        res.end('res:' + (location && location.href));
+        return true;
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    request(cors_anywhere)
+      .get('/')
+      .expect(419, 'res:null', done);
+  });
+
+  it('GET /dummy with handleInitialRequest', function(done) {
+    cors_anywhere = createServer({
+      handleInitialRequest: function(req, res, location) {
+        res.writeHead(419);
+        res.end('res:' + (location && location.href));
+        return true;
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    request(cors_anywhere)
+      .get('/dummy')
+      .expect(419, 'res:http://dummy/', done);
+  });
+
+  it('GET /example.com with handleInitialRequest', function(done) {
+    cors_anywhere = createServer({
+      handleInitialRequest: function(req, res, location) {
+        res.setHeader('X-Extra-Header', 'hello ' + location.href);
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    request(cors_anywhere)
+      .get('/example.com')
+      .set('Origin', 'null')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('X-Extra-Header', 'hello http://example.com/')
+      .expect(200, 'Response from example.com', done);
+  });
+});
+
+describe('checkRateLimit', function() {
+  afterEach(stopServer);
+
+  it('GET /example.com without rate-limit', function(done) {
+    cors_anywhere = createServer({
+      checkRateLimit: function() {},
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    request(cors_anywhere)
+      .get('/example.com/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+
+  it('GET /example.com with rate-limit', function(done) {
+    cors_anywhere = createServer({
+      checkRateLimit: function(origin) {
+        // Non-empty value. Let's return the origin parameter so that we also verify that the
+        // the parameter is really the origin.
+        return '[' + origin + ']';
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://example.net:1234')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(429, done,
+          'The origin "http://example.net" has sent too many requests.\n[http://example.com:1234]');
+  });
+});
+
+describe('redirectSameOrigin', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      redirectSameOrigin: true,
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com with Origin: http://example.com', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Cache-Control', 'private')
+      .expect('Vary', 'origin')
+      .expect('Location', 'http://example.com/')
+      .expect(301, done);
+  });
+
+  it('GET /example.com with Origin: https://example.com', function(done) {
+    // Not same-origin because of different schemes.
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'https://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /example.com with Origin: http://example.com:1234', function(done) {
+    // Not same-origin because of different ports.
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://example.com:1234')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /example.com:1234 with Origin: http://example.com', function(done) {
+    // Not same-origin because of different ports.
+    request(cors_anywhere)
+      .get('/example.com:1234/')
+      .set('Origin', 'http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com:1234', done);
+  });
+
+  it('GET /example.com with Origin: http://example.com.test', function(done) {
+    // Not same-origin because of different host names.
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'http://example.com.test')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('GET /example.com.com with Origin: http://example.com', function(done) {
+    // Not same-origin because of different host names.
+    request(cors_anywhere)
+      .get('/example.com.com/')
+      .set('Origin', 'http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com.com', done);
+  });
+
+  it('GET /prefix.example.com with Origin: http://example.com', function(done) {
+    // Not same-origin because of different host names.
+    request(cors_anywhere)
+      .get('/prefix.example.com/')
+      .set('Origin', 'http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from prefix.example.com', done);
+  });
+});
+
+describe('requireHeader', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      requireHeader: ['origin', 'x-requested-with'],
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com without header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(400, 'Missing required request header. Must specify one of: origin,x-requested-with', done);
+  });
+
+  it('GET /example.com with X-Requested-With header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('X-Requested-With', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+
+  it('GET /example.com with Origin header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/')
+      .set('Origin', 'null')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, done);
+  });
+
+  it('GET /example.com without header (requireHeader as string)', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        requireHeader: 'origin',
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/example.com/')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(400, 'Missing required request header. Must specify one of: origin', done);
+    });
+  });
+
+  it('GET /example.com with header (requireHeader as string)', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        requireHeader: 'origin',
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/example.com/')
+        .set('Origin', 'null')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(200, 'Response from example.com', done);
+    });
+  });
+
+  it('GET /example.com without header (requireHeader as string, uppercase)', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        requireHeader: 'ORIGIN',
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/example.com/')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(400, 'Missing required request header. Must specify one of: origin', done);
+    });
+  });
+
+  it('GET /example.com with header (requireHeader as string, uppercase)', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        requireHeader: 'ORIGIN',
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/example.com/')
+        .set('Origin', 'null')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(200, 'Response from example.com', done);
+    });
+  });
+
+  it('GET /example.com (requireHeader is an empty array)', function(done) {
+    stopServer(function() {
+      cors_anywhere = createServer({
+        requireHeader: [],
+      });
+      cors_anywhere_port = cors_anywhere.listen(0).address().port;
+      request(cors_anywhere)
+        .get('/example.com/')
+        .expect('Access-Control-Allow-Origin', '*')
+        .expect(200, 'Response from example.com', done);
+    });
+  });
+});
+
+describe('removeHeaders', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      removeHeaders: ['cookie', 'cookie2'],
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com with request cookie', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('cookie', 'a')
+      .set('cookie2', 'b')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+      }, done);
+  });
+
+  it('GET /example.com with unknown header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('cookie', 'a')
+      .set('cookie2', 'b')
+      .set('cookie3', 'c')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        cookie3: 'c',
+      }, done);
+  });
+});
+
+describe('setHeaders', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      setHeaders: {'x-powered-by': 'CORS Anywhere'},
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-powered-by': 'CORS Anywhere',
+      }, done);
+  });
+
+  it('GET /example.com should replace header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('x-powered-by', 'should be replaced')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-powered-by': 'CORS Anywhere',
+      }, done);
+  });
+});
+
+describe('setHeaders + removeHeaders', function() {
+  before(function() {
+    // setHeaders takes precedence over removeHeaders
+    cors_anywhere = createServer({
+      removeHeaders: ['x-powered-by'],
+      setHeaders: {'x-powered-by': 'CORS Anywhere'},
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('GET /example.com', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-powered-by': 'CORS Anywhere',
+      }, done);
+  });
+
+  it('GET /example.com should replace header', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('x-powered-by', 'should be replaced')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+        'x-powered-by': 'CORS Anywhere',
+      }, done);
+  });
+});
+
+describe('Access-Control-Max-Age set', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      corsMaxAge: 600,
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('OPTIONS /', function(done) {
+    request(cors_anywhere)
+      .options('/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Access-Control-Max-Age', '600')
+      .expect(200, '', done);
+  });
+
+  it('OPTIONS /example.com', function(done) {
+    request(cors_anywhere)
+      .options('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect('Access-Control-Max-Age', '600')
+      .expect(200, '', done);
+  });
+
+  it('GET / no Access-Control-Max-Age on GET', function(done) {
+    request(cors_anywhere)
+      .get('/')
+      .type('text/plain')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /example.com no Access-Control-Max-Age on GET', function(done) {
+    request(cors_anywhere)
+      .get('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, 'Response from example.com', done);
+  });
+});
+
+describe('Access-Control-Max-Age not set', function() {
+  before(function() {
+    cors_anywhere = createServer();
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('OPTIONS / corsMaxAge disabled', function(done) {
+    request(cors_anywhere)
+      .options('/')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, '', done);
+  });
+
+  it('OPTIONS /example.com corsMaxAge disabled', function(done) {
+    request(cors_anywhere)
+      .options('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, '', done);
+  });
+
+  it('GET /', function(done) {
+    request(cors_anywhere)
+      .get('/')
+      .type('text/plain')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, helpText, done);
+  });
+
+  it('GET /example.com', function(done) {
+    request(cors_anywhere)
+      .get('/example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectNoHeader('Access-Control-Max-Age')
+      .expect(200, 'Response from example.com', done);
+  });
+});
+
+describe('httpProxyOptions.xfwd=false', function() {
+  before(function() {
+    cors_anywhere = createServer({
+      httpProxyOptions: {
+        xfwd: false,
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  after(stopServer);
+
+  it('X-Forwarded-* headers should not be set', function(done) {
+    request(cors_anywhere)
+      .get('/example.com/echoheaders')
+      .set('test-include-xfwd', '')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expectJSON({
+        host: 'example.com',
+      }, done);
+  });
+});
+
+describe('httpProxyOptions.getProxyForUrl', function() {
+  var proxy_server;
+  var proxy_url;
+  before(function() {
+    // Using a real server instead of a mock because Nock doesn't can't mock proxies.
+    proxy_server = http.createServer(function(req, res) {
+      res.end(req.method + ' ' + req.url + ' Host=' + req.headers.host);
+    });
+    proxy_url = 'http://127.0.0.1:' + proxy_server.listen(0).address().port;
+
+    cors_anywhere = createServer({
+      httpProxyOptions: {
+        xfwd: false,
+      },
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+  });
+  afterEach(function() {
+    // Assuming that they were not set before.
+    delete process.env.https_proxy;
+    delete process.env.http_proxy;
+    delete process.env.no_proxy;
+  });
+  after(function(done) {
+    proxy_server.close(function() {
+      done();
+    });
+  });
+  after(stopServer);
+
+  it('http_proxy should be respected for matching domains', function(done) {
+    process.env.http_proxy = proxy_url;
+
+    request(cors_anywhere)
+      .get('/http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'GET http://example.com/ Host=example.com', done);
+  });
+
+  it('http_proxy should be ignored for http URLs', function(done) {
+    process.env.http_proxy = proxy_url;
+    request(cors_anywhere)
+      .get('/https://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from https://example.com', done);
+  });
+
+  it('https_proxy should be respected for matching domains', function(done) {
+    process.env.https_proxy = proxy_url;
+
+    request(cors_anywhere)
+      .get('/https://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'GET https://example.com/ Host=example.com', done);
+  });
+
+  it('https_proxy should be ignored for http URLs', function(done) {
+    process.env.https_proxy = proxy_url;
+    request(cors_anywhere)
+      .get('/http://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from example.com', done);
+  });
+
+  it('https_proxy + no_proxy should not intercept requests in no_proxy', function(done) {
+    process.env.https_proxy = proxy_url;
+    process.env.no_proxy = 'example.com:443';
+    request(cors_anywhere)
+      .get('/https://example.com')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, 'Response from https://example.com', done);
+  });
+});
+
+describe('helpFile', function() {
+
+  afterEach(stopServer);
+
+  it('GET / with custom text helpFile', function(done) {
+    var customHelpTextPath = path.join(__dirname, './customHelp.txt');
+    var customHelpText = fs.readFileSync(customHelpTextPath, {encoding: 'utf8'});
+
+    cors_anywhere = createServer({
+      helpFile: customHelpTextPath,
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+
+    request(cors_anywhere)
+      .get('/')
+      .type('text/plain')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, customHelpText, done);
+  });
+
+  it('GET / with custom HTML helpFile', function(done) {
+    var customHelpTextPath = path.join(__dirname, './customHelp.html');
+    var customHelpText = fs.readFileSync(customHelpTextPath, {encoding: 'utf8'});
+
+    cors_anywhere = createServer({
+      helpFile: customHelpTextPath,
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+
+    request(cors_anywhere)
+      .get('/')
+      .type('text/html')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(200, customHelpText, done);
+  });
+
+  it('GET / with non-existent help file', function(done) {
+    var customHelpTextPath = path.join(__dirname, 'Some non-existing file.');
+
+    cors_anywhere = createServer({
+      helpFile: customHelpTextPath,
+    });
+    cors_anywhere_port = cors_anywhere.listen(0).address().port;
+
+    request(cors_anywhere)
+      .get('/')
+      .type('text/plain')
+      .expect('Access-Control-Allow-Origin', '*')
+      .expect(500, '', done);
+  });
+});
+
+
