@@ -39,7 +39,7 @@ export default function SeaLevelMonitor() {
   const [lastUpdated, setLastUpdated] = useState<string>("");
 
   // Add auto-refresh interval state
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(60000); // 60 seconds default
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(120000); // 120 seconds default
 
   // Available monitoring stations
   const stations = [
@@ -58,13 +58,55 @@ export default function SeaLevelMonitor() {
     { id: "month", name: "Last 30 Days", code: "30", chartPoints: 120 },
   ];
 
+  // MODIFIED: Function to download data as CSV
+  const handleDownload = () => {
+    if (tideData.length === 0) {
+      alert("No data available to download.");
+      return;
+    }
+
+    const headers = Object.keys(tideData[0]);
+    const csvRows = [headers.join(',')];
+
+    for (const row of tideData) {
+      const values = headers.map(header => {
+        const val = row[header as keyof TideData];
+        // Ensure values are wrapped in quotes and handle internal quotes
+        const escaped = ('' + val).replace(/"/g, '""');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(','));
+    }
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    
+    // Find the selected station's name for the filename
+    const stationName = stations.find(s => s.id === selectedStation)?.name.replace(/\s/g, '_') || 'data';
+    
+    // Find the selected period's name for the filename
+    const periodName = periods.find(p => p.id === selectedPeriod)?.name.replace(/\s/g, '_') || 'data';
+    
+    // Use the selected period's name in the download filename
+    link.setAttribute('download', `${stationName}_${periodName}_data.csv`);
+    
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Function to fetch real tide data
   const fetchRealTideData = async (stationCode: string, periodCode: string) => {
     setIsLoading(true);
     try {
       // Construct the targetUrl with the encoded URL parameter
       const encodedUrl = encodeURIComponent(`https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`);
-      const targetUrl = `https://nara-vert.vercel.app/proxy?url=${encodedUrl}`;
+      const targetUrl = `http://localhost:5000/proxy?url=${encodedUrl}`;
       const response = await fetch(targetUrl);
 
 
@@ -160,7 +202,7 @@ export default function SeaLevelMonitor() {
     }
   };
 
-  // UPDATED: Effect to set the initial station from URL parameters, runs only once on mount
+  // Effect to set the initial station from URL parameters, runs only once on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stationParam = params.get('station');
@@ -169,7 +211,7 @@ export default function SeaLevelMonitor() {
     }
   }, []); // Empty dependency array ensures this runs only once after the initial render
 
-  // UPDATED: Effect to fetch data when station or period changes, and to handle auto-refresh
+  // Effect to fetch data when station or period changes, and to handle auto-refresh
   useEffect(() => {
     const station = stations.find(s => s.id === selectedStation);
     const period = periods.find(p => p.id === selectedPeriod);
@@ -355,12 +397,14 @@ export default function SeaLevelMonitor() {
                 </select>
               </div>
 
-              <a
-                href="http://localhost:5000/hdVisualize"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              {/* MODIFIED: Always show the Historical Data download button */}
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
               >
-                View Historical Data
-              </a>
+                Download Data
+              </button>
+              
             </div>
             <p className="text-sm text-gray-500">Last updated: {lastUpdated}</p>
           </div>
