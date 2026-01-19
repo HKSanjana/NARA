@@ -58,19 +58,37 @@ export default function SeaLevelMonitor() {
     { id: "month", name: "Last 30 Days", code: "30", chartPoints: 120 },
   ];
 
-  // MODIFIED: Function to download data as CSV
+  // Function to download data as CSV with separate Date and Time columns
   const handleDownload = () => {
     if (tideData.length === 0) {
       alert("No data available to download.");
       return;
     }
 
-    const headers = Object.keys(tideData[0]);
+    // 1. Define the new header order, including 'Date' and 'Time' at the beginning
+    const originalHeaders = Object.keys(tideData[0]).filter(h => h !== 'time');
+    const headers = ['Date', 'Time', ...originalHeaders];
+
     const csvRows = [headers.join(',')];
 
     for (const row of tideData) {
+      // Extract the original time string, which is typically "d/m/y H:M"
+      const fullTime = row.time || '';
+      const [datePart, timePart] = fullTime.split(' ');
+
+      // 2. Map values to the new header order
       const values = headers.map(header => {
-        const val = row[header as keyof TideData];
+        let val: string | number | undefined;
+
+        if (header === 'Date') {
+          val = datePart;
+        } else if (header === 'Time') {
+          val = timePart;
+        } else {
+          // Get value from the original row for other headers
+          val = row[header as keyof TideData];
+        }
+
         // Ensure values are wrapped in quotes and handle internal quotes
         const escaped = ('' + val).replace(/"/g, '""');
         return `"${escaped}"`;
@@ -236,34 +254,47 @@ export default function SeaLevelMonitor() {
     return () => clearInterval(intervalId);
   }, [selectedStation, selectedPeriod, autoRefreshInterval]); // Dependencies for the effect
 
+  // CORRECTED useMemo: Safely access the latest data point without mutating the array
   const currentConditions = useMemo(() => {
     if (tideData.length === 0) return null;
-    const latest = tideData.reverse()[0];
-    tideData.reverse(); // Reverse back to original order
+
+    // Access the last element directly without mutating the array.
+    const latest = tideData[tideData.length - 1];
+
+    if (!latest) return null;
 
     let prsValue;
+    // Prioritize prs, fall back to enc if prs is unavailable or invalid
     if (latest.prs && latest.prs !== '' && !isNaN(parseFloat(latest.prs))) {
       prsValue = parseFloat(latest.prs);
     } else if (latest.enc && latest.enc !== '' && !isNaN(parseFloat(latest.enc))) {
       prsValue = parseFloat(latest.enc);
     } else {
+      // If neither sea level measurement is valid, we can't show a core reading
       return null;
     }
 
     let trend = 'stable';
+    // Calculate trend from the last few data points
     if (tideData.length > 3) {
       const recent = tideData.slice(-4).map(d => {
+        // Use prs or enc for trend calculation
         if (d.prs && !isNaN(parseFloat(d.prs))) return parseFloat(d.prs);
         else if (d.enc && !isNaN(parseFloat(d.enc))) return parseFloat(d.enc);
         return NaN;
       }).filter(v => !isNaN(v));
 
       if (recent.length >= 3) {
+        // Compare the average of the last two points to the average of the two points before that
+        // Note: recent.length will be at least 3, so indices are safe.
         const avgRecent = (recent[recent.length - 1] + recent[recent.length - 2]) / 2;
-        const avgPrevious = (recent[0] + recent[1]) / 2;
+        const avgPrevious = (recent[recent.length - 3] + recent[recent.length - 4]) / 2;
 
-        if (avgRecent > avgPrevious + 0.005) trend = 'rising';
-        else if (avgRecent < avgPrevious - 0.005) trend = 'falling';
+        const difference = avgRecent - avgPrevious;
+
+        // Define a small threshold for change (0.5 cm)
+        if (difference > 0.005) trend = 'rising';
+        else if (difference < -0.005) trend = 'falling';
       }
     }
 
@@ -395,7 +426,7 @@ export default function SeaLevelMonitor() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </div>      
 
               {/* MODIFIED: Always show the Historical Data download button */}
               <button
