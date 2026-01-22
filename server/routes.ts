@@ -1,12 +1,13 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { getPool, sql } from "./db";
+import type { StationSummary, Measurement, MeasurementType, Station } from "@shared/types";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
-import { insertUserSchema, insertCalendarEventSchema, insertDocumentSchema, insertRtiRequestSchema, insertContactMessageSchema } from "@shared/schema";
 // Added for data processing API
 import fsSync from "fs";
 // Added for proxy functionality
@@ -115,14 +116,14 @@ const storage_multer = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage_multer,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|ppt|pptx|txt/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -135,12 +136,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create data directory if it doesn't exist
   await fs.mkdir(DATA_DIR, { recursive: true });
-  
+
 
   // Proxy health check endpoint
   app.get("/health", (req: Request, res: Response) => {
-    res.json({ 
-      status: "healthy", 
+    res.json({
+      status: "healthy",
       timestamp: new Date().toISOString(),
       service: "Integrated Server with Proxy"
     });
@@ -159,7 +160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: 'Missing "url" query parameter. Usage: /proxy?url=<target-url>',
         });
       }
-      
+
       let parsedUrl: URL;
       // Validate URL
       try {
@@ -233,7 +234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       createProxyMiddleware(proxyOptions)(req, res, next);
     },
   );
-  
+
   app.post("/api/data", async (req, res) => {
     try {
       const data = req.body;
@@ -260,7 +261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status?: string;
         [key: string]: any;
       }
-      
+
       const parameterTypes: string[] = Array.from(new Set(data.map((entry: DataEntry) => entry.parameter_type).filter(Boolean)));
       interface DataItem {
         parameter_type?: string;
@@ -268,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status?: string;
         [key: string]: any;
       }
-      
+
       const locations: string[] = Array.from(new Set(data.map((entry: DataItem) => entry.location).filter(Boolean)));
 
       const generatedFiles = [];
@@ -276,16 +277,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const paramType of parameterTypes) {
         for (const location of locations) {
-            interface DataEntry {
+          interface DataEntry {
             parameter_type?: string;
             location?: string;
             status?: string;
             [key: string]: any;
-            }
-            
-            const filteredData: DataEntry[] = data.filter((entry: DataEntry) => 
+          }
+
+          const filteredData: DataEntry[] = data.filter((entry: DataEntry) =>
             entry.parameter_type === paramType && entry.location === location
-            );
+          );
           if (filteredData.length > 0) {
             const filename = `${paramType}_${location}.json`;
             await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
@@ -305,13 +306,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error('Process data error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
         message: 'Failed to process data',
         error: error.message
       });
     }
   });
+
+  // ==================== MSSQL API Endpoints ====================
+
+  // Dashboard endpoint - Get latest readings for all stations
+  app.get("/api/dashboard", async (req: Request, res: Response) => {
+    try {
+      const pool = await getPool();
+      const result = await pool.request().query(`
+        SELECT v.*, s.latitude, s.longitude 
+        FROM vw_LatestStationReadings v
+        LEFT JOIN STATIONS s ON v.station_id = s.station_id
+      `);
+      res.json(result.recordset);
+    } catch (error: any) {
+      console.error('Dashboard API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Stations endpoint - Get all stations
+  app.get("/api/stations", async (req: Request, res: Response) => {
+    try {
+      const pool = await getPool();
+      const result = await pool.request().query(`
+        SELECT station_id, name, latitude, longitude, location_description 
+        FROM STATIONS
+      `);
+      res.json(result.recordset);
+    } catch (error: any) {
+      console.error('Stations API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Measurement types endpoint
+  app.get("/api/measurement-types", async (req: Request, res: Response) => {
+    try {
+      const pool = await getPool();
+      const result = await pool.request().query(`
+        SELECT measurement_type_id, code, description, unit 
+        FROM MEASUREMENT_TYPES
+      `);
+      res.json(result.recordset);
+    } catch (error: any) {
+      console.error('Measurement types API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Measurements by station endpoint
+  app.get("/api/measurements/:stationId", async (req: Request, res: Response) => {
+    try {
+      const { stationId } = req.params;
+
+      if (!stationId) {
+        return res.status(400).json({ error: 'Station ID required' });
+      }
+
+      const pool = await getPool();
+      const result = await pool.request()
+        .input('stationId', sql.VarChar, stationId)
+        .query(`
+          SELECT TOP 500 m.measurement_ts, m.value, mt.code, mt.unit
+          FROM MEASUREMENTS m
+          JOIN MEASUREMENT_TYPES mt ON m.measurement_type_id = mt.measurement_type_id
+          WHERE m.station_id = @stationId
+          ORDER BY m.measurement_ts DESC
+        `);
+
+      res.json(result.recordset);
+    } catch (error: any) {
+      console.error('Measurements API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Time-series data endpoint
+  app.get("/api/measurements/series", async (req: Request, res: Response) => {
+    try {
+      const { stationId, measurementTypeCode, startDate, endDate } = req.query;
+
+      if (!stationId || !measurementTypeCode || !startDate || !endDate) {
+        return res.status(400).json({
+          error: 'Missing required parameters: stationId, measurementTypeCode, startDate, endDate'
+        });
+      }
+
+      const pool = await getPool();
+      const result = await pool.request()
+        .input('stationId', sql.VarChar(32), stationId as string)
+        .input('measurementTypeCode', sql.VarChar(32), measurementTypeCode as string)
+        .input('startDate', sql.DateTime2, new Date(startDate as string))
+        .input('endDate', sql.DateTime2, new Date(endDate as string))
+        .query(`
+          SELECT m.measurement_ts, m.value, m.quality_flag
+          FROM MEASUREMENTS m
+          JOIN MEASUREMENT_TYPES mt ON m.measurement_type_id = mt.measurement_type_id
+          WHERE m.station_id = @stationId
+            AND mt.code = @measurementTypeCode
+            AND m.measurement_ts >= @startDate
+            AND m.measurement_ts <= @endDate
+          ORDER BY m.measurement_ts
+        `);
+
+      res.json(result.recordset);
+    } catch (error: any) {
+      console.error('Time-series API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Daily average endpoint
+  app.get("/api/measurements/daily-average", async (req: Request, res: Response) => {
+    try {
+      const { stationId, measurementTypeCode, date } = req.query;
+
+      if (!stationId || !measurementTypeCode || !date) {
+        return res.status(400).json({
+          error: 'Missing required parameters: stationId, measurementTypeCode, date'
+        });
+      }
+
+      const pool = await getPool();
+      const result = await pool.request()
+        .input('stationId', sql.VarChar(32), stationId as string)
+        .input('measurementTypeCode', sql.VarChar(32), measurementTypeCode as string)
+        .input('date', sql.Date, new Date(date as string))
+        .query(`
+          SELECT dbo.fn_DailyAverage(@stationId, @measurementTypeCode, @date) AS dailyAverage
+        `);
+
+      if (result.recordset.length > 0) {
+        res.json(result.recordset[0]);
+      } else {
+        res.json({ dailyAverage: null });
+      }
+    } catch (error: any) {
+      console.error('Daily average API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // ==================== End MSSQL API Endpoints ====================
+
 
   const httpServer = createServer(app);
   return httpServer;
