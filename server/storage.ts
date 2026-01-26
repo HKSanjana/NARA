@@ -4,8 +4,10 @@ import {
   calendarEvents,
   documents,
   rtiRequests,
-  seaLevelData,
   contactMessages,
+  stations,
+  measurementTypes,
+  measurements,
   type User,
   type InsertUser,
   type Division,
@@ -16,23 +18,27 @@ import {
   type InsertDocument,
   type RtiRequest,
   type InsertRtiRequest,
-  type SeaLevelData,
-  type InsertSeaLevelData,
   type ContactMessage,
   type InsertContactMessage,
+  type Station,
+  type InsertStation,
+  type MeasurementType,
+  type InsertMeasurementType,
+  type Measurement,
+  type InsertMeasurement,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, like, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
-  getUser(id: string): Promise<User | undefined>;
+  getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User>;
   getAllUsers(): Promise<User[]>;
-  deleteUser(id: string): Promise<boolean>;
+  deleteUser(id: number): Promise<boolean>;
 
   // Division operations
   getDivision(id: string): Promise<Division | undefined>;
@@ -42,49 +48,60 @@ export interface IStorage {
   deleteDivision(id: string): Promise<boolean>;
 
   // Calendar operations
-  getCalendarEvent(id: string): Promise<CalendarEvent | undefined>;
+  getCalendarEvent(id: number): Promise<CalendarEvent | undefined>;
   getCalendarEvents(startDate?: Date, endDate?: Date): Promise<CalendarEvent[]>;
   getCalendarEventsByDivision(divisionId: string): Promise<CalendarEvent[]>;
   createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;
-  updateCalendarEvent(id: string, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent>;
-  deleteCalendarEvent(id: string): Promise<boolean>;
+  updateCalendarEvent(id: number, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent>;
+  deleteCalendarEvent(id: number): Promise<boolean>;
 
   // Document operations
-  getDocument(id: string): Promise<Document | undefined>;
+  getDocument(id: number): Promise<Document | undefined>;
   getAllDocuments(): Promise<Document[]>;
   getDocumentsByCategory(category: string): Promise<Document[]>;
   getDocumentsByDivision(divisionId: string): Promise<Document[]>;
   createDocument(document: InsertDocument): Promise<Document>;
-  updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document>;
-  deleteDocument(id: string): Promise<boolean>;
-  incrementDownloadCount(id: string): Promise<boolean>;
+  updateDocument(id: number, document: Partial<InsertDocument>): Promise<Document>;
+  deleteDocument(id: number): Promise<boolean>;
+  incrementDownloadCount(id: number): Promise<boolean>;
 
   // RTI operations
-  getRtiRequest(id: string): Promise<RtiRequest | undefined>;
+  getRtiRequest(id: number): Promise<RtiRequest | undefined>;
   getAllRtiRequests(): Promise<RtiRequest[]>;
   getRtiRequestsByStatus(status: string): Promise<RtiRequest[]>;
   createRtiRequest(request: InsertRtiRequest): Promise<RtiRequest>;
-  updateRtiRequest(id: string, request: Partial<RtiRequest>): Promise<RtiRequest>;
-  deleteRtiRequest(id: string): Promise<boolean>;
+  updateRtiRequest(id: number, request: Partial<RtiRequest>): Promise<RtiRequest>;
+  deleteRtiRequest(id: number): Promise<boolean>;
 
-  // Sea level data operations
-  getSeaLevelData(stationId?: string, startDate?: Date, endDate?: Date): Promise<SeaLevelData[]>;
-  getLatestSeaLevelData(stationId: string): Promise<SeaLevelData | undefined>;
-  createSeaLevelData(data: InsertSeaLevelData): Promise<SeaLevelData>;
-  deleteSeaLevelData(id: string): Promise<boolean>;
+  // Station operations
+  getStation(id: string): Promise<Station | undefined>;
+  getAllStations(): Promise<Station[]>;
+  createStation(station: InsertStation): Promise<Station>;
+
+  // Measurement type operations
+  getMeasurementType(id: number): Promise<MeasurementType | undefined>;
+  getMeasurementTypeByCode(code: string): Promise<MeasurementType | undefined>;
+  getAllMeasurementTypes(): Promise<MeasurementType[]>;
+  createMeasurementType(type: InsertMeasurementType): Promise<MeasurementType>;
+
+  // Measurement operations
+  getMeasurements(stationId?: string, startDate?: Date, endDate?: Date): Promise<Measurement[]>;
+  getLatestMeasurement(stationId: string, typeId?: number): Promise<Measurement | undefined>;
+  createMeasurement(data: InsertMeasurement): Promise<Measurement>;
+  deleteMeasurement(id: number): Promise<boolean>;
 
   // Contact message operations
-  getContactMessage(id: string): Promise<ContactMessage | undefined>;
+  getContactMessage(id: number): Promise<ContactMessage | undefined>;
   getAllContactMessages(): Promise<ContactMessage[]>;
   getContactMessagesByStatus(status: string): Promise<ContactMessage[]>;
   createContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
-  updateContactMessage(id: string, message: Partial<ContactMessage>): Promise<ContactMessage>;
-  deleteContactMessage(id: string): Promise<boolean>;
+  updateContactMessage(id: number, message: Partial<ContactMessage>): Promise<ContactMessage>;
+  deleteContactMessage(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
   // User operations
-  async getUser(id: string): Promise<User | undefined> {
+  async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
@@ -104,7 +121,7 @@ export class DatabaseStorage implements IStorage {
     return newUser;
   }
 
-  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+  async updateUser(id: number, user: Partial<InsertUser>): Promise<User> {
     const [updatedUser] = await db
       .update(users)
       .set({ ...user, updatedAt: new Date() })
@@ -117,7 +134,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users).orderBy(desc(users.createdAt));
   }
 
-  async deleteUser(id: string): Promise<boolean> {
+  async deleteUser(id: number): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id));
     return (result.rowCount ?? 0) > 0;
   }
@@ -152,7 +169,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Calendar operations
-  async getCalendarEvent(id: string): Promise<CalendarEvent | undefined> {
+  async getCalendarEvent(id: number): Promise<CalendarEvent | undefined> {
     const [event] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, id));
     return event;
   }
@@ -168,7 +185,7 @@ export class DatabaseStorage implements IStorage {
         ))
         .orderBy(calendarEvents.date);
     }
-    
+
     return await db.select().from(calendarEvents).orderBy(calendarEvents.date);
   }
 
@@ -185,7 +202,7 @@ export class DatabaseStorage implements IStorage {
     return newEvent;
   }
 
-  async updateCalendarEvent(id: string, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent> {
+  async updateCalendarEvent(id: number, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent> {
     const [updatedEvent] = await db
       .update(calendarEvents)
       .set(event)
@@ -194,13 +211,13 @@ export class DatabaseStorage implements IStorage {
     return updatedEvent;
   }
 
-  async deleteCalendarEvent(id: string): Promise<boolean> {
+  async deleteCalendarEvent(id: number): Promise<boolean> {
     const result = await db.delete(calendarEvents).where(eq(calendarEvents.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
   // Document operations
-  async getDocument(id: string): Promise<Document | undefined> {
+  async getDocument(id: number): Promise<Document | undefined> {
     const [document] = await db.select().from(documents).where(eq(documents.id, id));
     return document;
   }
@@ -230,7 +247,7 @@ export class DatabaseStorage implements IStorage {
     return newDocument;
   }
 
-  async updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document> {
+  async updateDocument(id: number, document: Partial<InsertDocument>): Promise<Document> {
     const [updatedDocument] = await db
       .update(documents)
       .set({ ...document, updatedAt: new Date() })
@@ -239,12 +256,12 @@ export class DatabaseStorage implements IStorage {
     return updatedDocument;
   }
 
-  async deleteDocument(id: string): Promise<boolean> {
+  async deleteDocument(id: number): Promise<boolean> {
     const result = await db.delete(documents).where(eq(documents.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
-  async incrementDownloadCount(id: string): Promise<boolean> {
+  async incrementDownloadCount(id: number): Promise<boolean> {
     const result = await db
       .update(documents)
       .set({ downloadCount: sql`download_count + 1` })
@@ -253,7 +270,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // RTI operations
-  async getRtiRequest(id: string): Promise<RtiRequest | undefined> {
+  async getRtiRequest(id: number): Promise<RtiRequest | undefined> {
     const [request] = await db.select().from(rtiRequests).where(eq(rtiRequests.id, id));
     return request;
   }
@@ -275,7 +292,7 @@ export class DatabaseStorage implements IStorage {
     return newRequest;
   }
 
-  async updateRtiRequest(id: string, request: Partial<RtiRequest>): Promise<RtiRequest> {
+  async updateRtiRequest(id: number, request: Partial<RtiRequest>): Promise<RtiRequest> {
     const [updatedRequest] = await db
       .update(rtiRequests)
       .set(request)
@@ -284,57 +301,97 @@ export class DatabaseStorage implements IStorage {
     return updatedRequest;
   }
 
-  async deleteRtiRequest(id: string): Promise<boolean> {
+  async deleteRtiRequest(id: number): Promise<boolean> {
     const result = await db.delete(rtiRequests).where(eq(rtiRequests.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
-  // Sea level data operations
-  async getSeaLevelData(stationId?: string, startDate?: Date, endDate?: Date): Promise<SeaLevelData[]> {
+  // Station operations
+  async getStation(id: string): Promise<Station | undefined> {
+    const [station] = await db.select().from(stations).where(eq(stations.stationId, id));
+    return station;
+  }
+
+  async getAllStations(): Promise<Station[]> {
+    return await db.select().from(stations).orderBy(stations.name);
+  }
+
+  async createStation(station: InsertStation): Promise<Station> {
+    const [newStation] = await db.insert(stations).values(station).returning();
+    return newStation;
+  }
+
+  // Measurement type operations
+  async getMeasurementType(id: number): Promise<MeasurementType | undefined> {
+    const [type] = await db.select().from(measurementTypes).where(eq(measurementTypes.measurementTypeId, id));
+    return type;
+  }
+
+  async getMeasurementTypeByCode(code: string): Promise<MeasurementType | undefined> {
+    const [type] = await db.select().from(measurementTypes).where(eq(measurementTypes.code, code));
+    return type;
+  }
+
+  async getAllMeasurementTypes(): Promise<MeasurementType[]> {
+    return await db.select().from(measurementTypes).orderBy(measurementTypes.code);
+  }
+
+  async createMeasurementType(type: InsertMeasurementType): Promise<MeasurementType> {
+    const [newType] = await db.insert(measurementTypes).values(type).returning();
+    return newType;
+  }
+
+  // Measurement operations
+  async getMeasurements(stationId?: string, startDate?: Date, endDate?: Date): Promise<Measurement[]> {
     const conditions = [];
     if (stationId) {
-      conditions.push(eq(seaLevelData.stationId, stationId));
+      conditions.push(eq(measurements.stationId, stationId));
     }
     if (startDate) {
-      conditions.push(gte(seaLevelData.timestamp, startDate));
+      conditions.push(gte(measurements.measurementTs, startDate));
     }
     if (endDate) {
-      conditions.push(lte(seaLevelData.timestamp, endDate));
+      conditions.push(lte(measurements.measurementTs, endDate));
     }
-    
+
     if (conditions.length > 0) {
       return await db
         .select()
-        .from(seaLevelData)
+        .from(measurements)
         .where(and(...conditions))
-        .orderBy(desc(seaLevelData.timestamp));
+        .orderBy(desc(measurements.measurementTs));
     }
-    
-    return await db.select().from(seaLevelData).orderBy(desc(seaLevelData.timestamp));
+
+    return await db.select().from(measurements).orderBy(desc(measurements.measurementTs));
   }
 
-  async getLatestSeaLevelData(stationId: string): Promise<SeaLevelData | undefined> {
+  async getLatestMeasurement(stationId: string, typeId?: number): Promise<Measurement | undefined> {
+    const conditions = [eq(measurements.stationId, stationId)];
+    if (typeId) {
+      conditions.push(eq(measurements.measurementTypeId, typeId));
+    }
+
     const [data] = await db
       .select()
-      .from(seaLevelData)
-      .where(eq(seaLevelData.stationId, stationId))
-      .orderBy(desc(seaLevelData.timestamp))
+      .from(measurements)
+      .where(and(...conditions))
+      .orderBy(desc(measurements.measurementTs))
       .limit(1);
     return data;
   }
 
-  async createSeaLevelData(data: InsertSeaLevelData): Promise<SeaLevelData> {
-    const [newData] = await db.insert(seaLevelData).values(data).returning();
+  async createMeasurement(data: InsertMeasurement): Promise<Measurement> {
+    const [newData] = await db.insert(measurements).values(data).returning();
     return newData;
   }
 
-  async deleteSeaLevelData(id: string): Promise<boolean> {
-    const result = await db.delete(seaLevelData).where(eq(seaLevelData.id, id));
+  async deleteMeasurement(id: number): Promise<boolean> {
+    const result = await db.delete(measurements).where(eq(measurements.measurementId, id));
     return (result.rowCount ?? 0) > 0;
   }
 
   // Contact message operations
-  async getContactMessage(id: string): Promise<ContactMessage | undefined> {
+  async getContactMessage(id: number): Promise<ContactMessage | undefined> {
     const [message] = await db.select().from(contactMessages).where(eq(contactMessages.id, id));
     return message;
   }
@@ -356,7 +413,7 @@ export class DatabaseStorage implements IStorage {
     return newMessage;
   }
 
-  async updateContactMessage(id: string, message: Partial<ContactMessage>): Promise<ContactMessage> {
+  async updateContactMessage(id: number, message: Partial<ContactMessage>): Promise<ContactMessage> {
     const [updatedMessage] = await db
       .update(contactMessages)
       .set(message)
@@ -365,7 +422,7 @@ export class DatabaseStorage implements IStorage {
     return updatedMessage;
   }
 
-  async deleteContactMessage(id: string): Promise<boolean> {
+  async deleteContactMessage(id: number): Promise<boolean> {
     const result = await db.delete(contactMessages).where(eq(contactMessages.id, id));
     return (result.rowCount ?? 0) > 0;
   }

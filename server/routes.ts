@@ -1,7 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getPool, sql } from "./db";
+import { db, sql } from "./db";
+import { stations, measurementTypes, measurements } from "@shared/schema";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 import type { StationSummary, Measurement, MeasurementType, Station } from "@shared/types";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -314,18 +316,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ==================== MSSQL API Endpoints ====================
+  // ==================== PostgreSQL API Endpoints ====================
 
   // Dashboard endpoint - Get latest readings for all stations
   app.get("/api/dashboard", async (req: Request, res: Response) => {
     try {
-      const pool = await getPool();
-      const result = await pool.request().query(`
-        SELECT v.*, s.latitude, s.longitude 
-        FROM vw_LatestStationReadings v
-        LEFT JOIN STATIONS s ON v.station_id = s.station_id
-      `);
-      res.json(result.recordset);
+      // Re-implementing the logic of vw_LatestStationReadings using Drizzle
+      // This is a simplified version that gets the latest readings
+      const allStations = await storage.getAllStations();
+      const mTypes = await storage.getAllMeasurementTypes();
+
+      const dashboardData = await Promise.all(allStations.map(async (station) => {
+        const latestReading = await storage.getLatestMeasurement(station.stationId);
+
+        // This is a placeholder for the actual pivot logic if needed
+        // For now, let's just return the station info and the latest timestamp
+        const summary: any = {
+          station_id: station.stationId,
+          name: station.name,
+          latitude: station.latitude ? parseFloat(station.latitude.toString()) : null,
+          longitude: station.longitude ? parseFloat(station.longitude.toString()) : null,
+          latest_ts: latestReading?.measurementTs,
+        };
+
+        // If we need the specific parameter pivot (AT, BP, etc.), we'd query those specifically
+        // But for a migration, let's keep it simple first
+        for (const mt of mTypes) {
+          const val = await storage.getLatestMeasurement(station.stationId, mt.measurementTypeId);
+          if (val) {
+            summary[mt.code] = val.value;
+          }
+        }
+
+        return summary;
+      }));
+
+      res.json(dashboardData);
     } catch (error: any) {
       console.error('Dashboard API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
@@ -335,12 +361,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stations endpoint - Get all stations
   app.get("/api/stations", async (req: Request, res: Response) => {
     try {
-      const pool = await getPool();
-      const result = await pool.request().query(`
-        SELECT station_id, name, latitude, longitude, location_description 
-        FROM STATIONS
-      `);
-      res.json(result.recordset);
+      const allStations = await storage.getAllStations();
+      res.json(allStations);
     } catch (error: any) {
       console.error('Stations API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
@@ -350,12 +372,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Measurement types endpoint
   app.get("/api/measurement-types", async (req: Request, res: Response) => {
     try {
-      const pool = await getPool();
-      const result = await pool.request().query(`
-        SELECT measurement_type_id, code, description, unit 
-        FROM MEASUREMENT_TYPES
-      `);
-      res.json(result.recordset);
+      const types = await storage.getAllMeasurementTypes();
+      res.json(types);
     } catch (error: any) {
       console.error('Measurement types API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
@@ -371,18 +389,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Station ID required' });
       }
 
-      const pool = await getPool();
-      const result = await pool.request()
-        .input('stationId', sql.VarChar, stationId)
-        .query(`
-          SELECT TOP 500 m.measurement_ts, m.value, mt.code, mt.unit
-          FROM MEASUREMENTS m
-          JOIN MEASUREMENT_TYPES mt ON m.measurement_type_id = mt.measurement_type_id
-          WHERE m.station_id = @stationId
-          ORDER BY m.measurement_ts DESC
-        `);
+      const results = await db.select({
+        measurement_ts: measurements.measurementTs,
+        value: measurements.value,
+        code: measurementTypes.code,
+        unit: measurementTypes.unit
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(eq(measurements.stationId, stationId))
+        .orderBy(desc(measurements.measurementTs))
+        .limit(500);
 
-      res.json(result.recordset);
+      res.json(results);
     } catch (error: any) {
       console.error('Measurements API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
@@ -400,24 +419,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const pool = await getPool();
-      const result = await pool.request()
-        .input('stationId', sql.VarChar(32), stationId as string)
-        .input('measurementTypeCode', sql.VarChar(32), measurementTypeCode as string)
-        .input('startDate', sql.DateTime2, new Date(startDate as string))
-        .input('endDate', sql.DateTime2, new Date(endDate as string))
-        .query(`
-          SELECT m.measurement_ts, m.value, m.quality_flag
-          FROM MEASUREMENTS m
-          JOIN MEASUREMENT_TYPES mt ON m.measurement_type_id = mt.measurement_type_id
-          WHERE m.station_id = @stationId
-            AND mt.code = @measurementTypeCode
-            AND m.measurement_ts >= @startDate
-            AND m.measurement_ts <= @endDate
-          ORDER BY m.measurement_ts
-        `);
+      const results = await db.select({
+        measurement_ts: measurements.measurementTs,
+        value: measurements.value,
+        quality_flag: measurements.qualityFlag
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(and(
+          eq(measurements.stationId, stationId as string),
+          eq(measurementTypes.code, measurementTypeCode as string),
+          gte(measurements.measurementTs, new Date(startDate as string)),
+          lte(measurements.measurementTs, new Date(endDate as string))
+        ))
+        .orderBy(measurements.measurementTs);
 
-      res.json(result.recordset);
+      res.json(results);
     } catch (error: any) {
       console.error('Time-series API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
@@ -435,27 +452,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const pool = await getPool();
-      const result = await pool.request()
-        .input('stationId', sql.VarChar(32), stationId as string)
-        .input('measurementTypeCode', sql.VarChar(32), measurementTypeCode as string)
-        .input('date', sql.Date, new Date(date as string))
-        .query(`
-          SELECT dbo.fn_DailyAverage(@stationId, @measurementTypeCode, @date) AS dailyAverage
-        `);
+      const targetDate = new Date(date as string);
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(targetDate.getDate() + 1);
 
-      if (result.recordset.length > 0) {
-        res.json(result.recordset[0]);
-      } else {
-        res.json({ dailyAverage: null });
-      }
+      const [result] = await db.select({
+        dailyAverage: sql<number>`AVG(${measurements.value})`
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(and(
+          eq(measurements.stationId, stationId as string),
+          eq(measurementTypes.code, measurementTypeCode as string),
+          gte(measurements.measurementTs, targetDate),
+          lte(measurements.measurementTs, nextDay)
+        ));
+
+      res.json(result || { dailyAverage: null });
     } catch (error: any) {
       console.error('Daily average API error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
     }
   });
 
-  // ==================== End MSSQL API Endpoints ====================
+  // ==================== End PostgreSQL API Endpoints ====================
 
 
   const httpServer = createServer(app);
