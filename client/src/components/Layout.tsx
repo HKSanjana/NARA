@@ -21,6 +21,7 @@ export default function Layout({ children }) {
             <li><Link href="/about">About</Link></li>
             <li><Link href="/services">Services</Link></li>
             <li><Link href="/sea-level">Sea Level</Link></li>
+            <li><Link href="/dashboard">Dashboard</Link></li>
             <li><Link href="/downloads">Downloads</Link></li>
             <li><Link href="/rti">RTI</Link></li>
             <li><Link href="/contact">Contact</Link></li>
