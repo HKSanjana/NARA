@@ -54,8 +54,8 @@ export default function Dashboard() {
     };
 
     const filteredStations = stations.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.station_id.toLowerCase().includes(searchQuery.toLowerCase())
+        (s.name?.toLowerCase() ?? "").includes(searchQuery.toLowerCase()) ||
+        (s.station_id?.toLowerCase() ?? "").includes(searchQuery.toLowerCase())
     );
 
     // Simple global stats
@@ -116,7 +116,7 @@ export default function Dashboard() {
                                     <div className="card glass station-card h-full">
                                         <div className="card-header">
                                             <div>
-                                                <h2 className="station-name">{station.name}</h2>
+                                                <h2 className="station-name">{station.name || 'Unnamed Station'}</h2>
                                                 <span className="timestamp" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
                                                     <Activity size={12} /> {station.station_id}
                                                 </span>
