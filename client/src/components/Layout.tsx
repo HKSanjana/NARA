@@ -1,6 +1,6 @@
 import React from 'react';
-import { Link } from 'wouter'; 
-import naraLogo from '@/assets/logo.png'; 
+import { Link } from 'wouter';
+import naraLogo from '@/assets/logo.png';
 
 export default function Layout({ children }) {
   return (
@@ -14,13 +14,14 @@ export default function Layout({ children }) {
               <img src={naraLogo} alt="NARA Logo" className="h-12 w-auto" />
             </a>
           </Link>
-          
+
           {/* Navigation links */}
           <ul className="flex space-x-6 text-gray-700 font-medium">
             <li><Link href="/">Home</Link></li>
             <li><Link href="/about">About</Link></li>
             <li><Link href="/services">Services</Link></li>
             <li><Link href="/sea-level">Sea Level</Link></li>
+            <li><Link href="/dashboard">Dashboard</Link></li>
             <li><Link href="/downloads">Downloads</Link></li>
             <li><Link href="/rti">RTI</Link></li>
             <li><Link href="/contact">Contact</Link></li>

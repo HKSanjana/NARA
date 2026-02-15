@@ -39,10 +39,10 @@ const MapComponent: React.FC = () => {
     const handlePinClick = (pinName: string) => {
         switch (pinName) {
             case 'Jaffna':
-                setLocation('/mjdata?loc=SL01');
+                setLocation('/stations/0002');
                 break;
             case 'Mirissa':
-                setLocation('/mjdata?loc=002');
+                setLocation('/stations/SL01');
                 break;
             case 'Hambanthota':
                 setLocation('/hdVisualize');

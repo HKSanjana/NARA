@@ -1,247 +1,164 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, serial, integer, timestamp, boolean, decimal, doublePrecision, varchar, primaryKey, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table for authentication
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
-
-// Users table for admin authentication and user profiles
+// Users table
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  email: varchar("email").unique(),
+  email: text("email").unique(),
   password: text("password"),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  role: varchar("role").default("user"), // user, admin, researcher
-  division: varchar("division"),
-  position: varchar("position"),
-  profileImageUrl: varchar("profile_image_url"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  role: text("role").default("user"),
+  division: text("division"),
+  position: text("position"),
+  profileImageUrl: text("profile_image_url"),
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Research divisions
+// Divisions table
 export const divisions = pgTable("divisions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  head: varchar("head"),
-  email: varchar("email"),
-  phone: varchar("phone"),
-  services: jsonb("services"), // array of services
-  products: jsonb("products"), // array of products
-  staff: jsonb("staff"), // array of staff members
-  createdAt: timestamp("created_at").defaultNow(),
+  headOfDivision: text("head_of_division"),
+  email: text("email"),
+  phone: text("phone"),
 });
 
-// Calendar events for research activities
+// Calendar events table
 export const calendarEvents = pgTable("calendar_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
   date: timestamp("date").notNull(),
   startTime: text("start_time"),
   endTime: text("end_time"),
-  eventType: varchar("event_type"), // research, monitoring, training, meeting
-  divisionId: varchar("division_id").references(() => divisions.id),
+  eventType: text("event_type"),
+  divisionId: text("division_id").references(() => divisions.id),
   location: text("location"),
-  participants: jsonb("participants"),
-  status: varchar("status").default("scheduled"), // scheduled, ongoing, completed, cancelled
-  createdBy: varchar("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
+  participants: text("participants"), // JSON or comma-separated
+  status: text("status").default("scheduled"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Documents and downloads
+// Documents table
 export const documents = pgTable("documents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
   fileName: text("file_name").notNull(),
   filePath: text("file_path").notNull(),
   fileSize: integer("file_size"),
-  mimeType: varchar("mime_type"),
-  category: varchar("category"), // report, publication, guideline, form
-  divisionId: varchar("division_id").references(() => divisions.id),
+  mimeType: text("mime_type"),
+  category: text("category"),
+  divisionId: text("division_id").references(() => divisions.id),
   downloadCount: integer("download_count").default(0),
   isPublic: boolean("is_public").default(true),
-  uploadedBy: varchar("uploaded_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  uploadedBy: text("uploaded_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// RTI (Right to Information) requests
+// RTI Requests table
 export const rtiRequests = pgTable("rti_requests", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  requesterId: varchar("requester_id").references(() => users.id),
-  requesterName: text("requester_name").notNull(),
-  requesterEmail: varchar("requester_email").notNull(),
-  requesterPhone: varchar("requester_phone"),
+  id: serial("id").primaryKey(),
+  requesterId: text("requester_id"),
+  requesterName: text("requester_name"),
+  requesterEmail: text("requester_email"),
+  requesterPhone: text("requester_phone"),
   requesterAddress: text("requester_address"),
-  informationRequested: text("information_requested").notNull(),
+  informationRequested: text("information_requested"),
   purpose: text("purpose"),
-  preferredFormat: varchar("preferred_format"), // email, post, pickup
-  status: varchar("status").default("pending"), // pending, processing, approved, rejected, completed
-  assignedTo: varchar("assigned_to").references(() => users.id),
+  preferredFormat: text("preferred_format"),
+  status: text("status").default("pending"),
+  assignedTo: text("assigned_to"),
   responseText: text("response_text"),
-  responseDocuments: jsonb("response_documents"),
-  submittedAt: timestamp("submitted_at").defaultNow(),
-  responseDate: timestamp("response_date"),
-  completedAt: timestamp("completed_at"),
+  responseDocuments: text("response_documents"), // JSON or comma-separated paths
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Sea level monitoring data
-export const seaLevelData = pgTable("sea_level_data", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  stationId: varchar("station_id").notNull(),
-  stationName: text("station_name").notNull(),
-  location: text("location"),
-  latitude: text("latitude"),
-  longitude: text("longitude"),
-  timestamp: timestamp("timestamp").notNull(),
-  seaLevel: text("sea_level"), // in meters
-  temperature: text("temperature"), // in celsius
-  salinity: text("salinity"),
-  waveHeight: text("wave_height"),
-  windSpeed: text("wind_speed"),
-  windDirection: text("wind_direction"),
-  dataQuality: varchar("data_quality").default("good"), // good, fair, poor
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Contact messages
+// Contact Messages table
 export const contactMessages = pgTable("contact_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  email: varchar("email").notNull(),
+  email: text("email").notNull(),
   subject: text("subject").notNull(),
   message: text("message").notNull(),
-  division: varchar("division"),
-  status: varchar("status").default("unread"), // unread, read, replied
-  assignedTo: varchar("assigned_to").references(() => users.id),
+  division: text("division"),
+  status: text("status").default("new"),
+  assignedTo: text("assigned_to"),
   replyText: text("reply_text"),
-  submittedAt: timestamp("submitted_at").defaultNow(),
-  repliedAt: timestamp("replied_at"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
 
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  calendarEvents: many(calendarEvents),
-  documents: many(documents),
-  rtiRequests: many(rtiRequests),
-  assignedRtiRequests: many(rtiRequests),
-  contactMessages: many(contactMessages),
+// Monitoring Stations table (from NARADB.sql)
+export const stations = pgTable("stations", {
+  stationId: varchar("station_id", { length: 32 }).primaryKey(),
+  name: text("name"),
+  latitude: decimal("latitude", { precision: 9, scale: 6 }),
+  longitude: decimal("longitude", { precision: 9, scale: 6 }),
+  locationDescription: text("location_description"),
+});
+
+// Measurement Types table (from NARADB.sql)
+export const measurementTypes = pgTable("measurement_types", {
+  measurementTypeId: serial("measurement_type_id").primaryKey(),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  description: text("description"),
+  unit: varchar("unit", { length: 32 }),
+});
+
+// Measurements table (from NARADB.sql)
+export const measurements = pgTable("measurements", {
+  measurementId: serial("measurement_id").primaryKey(),
+  stationId: varchar("station_id", { length: 32 }).references(() => stations.stationId).notNull(),
+  measurementTs: timestamp("measurement_ts").notNull(),
+  measurementTypeId: integer("measurement_type_id").references(() => measurementTypes.measurementTypeId).notNull(),
+  value: doublePrecision("value"),
+  qualityFlag: varchar("quality_flag", { length: 16 }),
+}, (table) => ({
+  unq: unique("uq_measurement").on(table.stationId, table.measurementTypeId, table.measurementTs),
 }));
 
-export const divisionsRelations = relations(divisions, ({ many }) => ({
-  calendarEvents: many(calendarEvents),
-  documents: many(documents),
-}));
+// Backward compatibility or legacy names if needed
+export const seaLevelData = measurements;
 
-export const calendarEventsRelations = relations(calendarEvents, ({ one }) => ({
-  division: one(divisions, {
-    fields: [calendarEvents.divisionId],
-    references: [divisions.id],
-  }),
-  creator: one(users, {
-    fields: [calendarEvents.createdBy],
-    references: [users.id],
-  }),
-}));
-
-export const documentsRelations = relations(documents, ({ one }) => ({
-  division: one(divisions, {
-    fields: [documents.divisionId],
-    references: [divisions.id],
-  }),
-  uploader: one(users, {
-    fields: [documents.uploadedBy],
-    references: [users.id],
-  }),
-}));
-
-export const rtiRequestsRelations = relations(rtiRequests, ({ one }) => ({
-  requester: one(users, {
-    fields: [rtiRequests.requesterId],
-    references: [users.id],
-  }),
-  assignee: one(users, {
-    fields: [rtiRequests.assignedTo],
-    references: [users.id],
-  }),
-}));
-
-export const contactMessagesRelations = relations(contactMessages, ({ one }) => ({
-  assignee: one(users, {
-    fields: [contactMessages.assignedTo],
-    references: [users.id],
-  }),
-}));
-
-// Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+// Zod schemas for validation
+export const insertUserSchema = createInsertSchema(users);
+export const insertCalendarEventSchema = createInsertSchema(calendarEvents, {
+  date: z.coerce.date(),
 });
-
-export const insertDivisionSchema = createInsertSchema(divisions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertDocumentSchema = createInsertSchema(documents).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertRtiRequestSchema = createInsertSchema(rtiRequests).omit({
-  id: true,
-  submittedAt: true,
-  responseDate: true,
-  completedAt: true,
-});
-
-export const insertSeaLevelDataSchema = createInsertSchema(seaLevelData).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertContactMessageSchema = createInsertSchema(contactMessages).omit({
-  id: true,
-  submittedAt: true,
-  repliedAt: true,
-});
+export const insertDocumentSchema = createInsertSchema(documents);
+export const insertRtiRequestSchema = createInsertSchema(rtiRequests);
+export const insertContactMessageSchema = createInsertSchema(contactMessages);
+export const insertStationSchema = createInsertSchema(stations);
+export const insertMeasurementTypeSchema = createInsertSchema(measurementTypes);
+export const insertMeasurementSchema = createInsertSchema(measurements);
 
 // Types
 export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type Division = typeof divisions.$inferSelect;
-export type InsertDivision = z.infer<typeof insertDivisionSchema>;
+export type InsertDivision = typeof divisions.$inferInsert;
 export type CalendarEvent = typeof calendarEvents.$inferSelect;
-export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
+export type InsertCalendarEvent = typeof calendarEvents.$inferInsert;
 export type Document = typeof documents.$inferSelect;
-export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type InsertDocument = typeof documents.$inferInsert;
 export type RtiRequest = typeof rtiRequests.$inferSelect;
-export type InsertRtiRequest = z.infer<typeof insertRtiRequestSchema>;
-export type SeaLevelData = typeof seaLevelData.$inferSelect;
-export type InsertSeaLevelData = z.infer<typeof insertSeaLevelDataSchema>;
+export type InsertRtiRequest = typeof rtiRequests.$inferInsert;
 export type ContactMessage = typeof contactMessages.$inferSelect;
-export type InsertContactMessage = z.infer<typeof insertContactMessageSchema>;
+export type InsertContactMessage = typeof contactMessages.$inferInsert;
+export type Station = typeof stations.$inferSelect;
+export type InsertStation = typeof stations.$inferInsert;
+export type MeasurementType = typeof measurementTypes.$inferSelect;
+export type InsertMeasurementType = typeof measurementTypes.$inferInsert;
+export type Measurement = typeof measurements.$inferSelect;
+export type InsertMeasurement = typeof measurements.$inferInsert;
+export type SeaLevelData = Measurement;
+export type InsertSeaLevelData = InsertMeasurement;

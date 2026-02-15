@@ -16,22 +16,22 @@ interface TideData {
 
 interface ChartDataPoint {
   time: string;
-  seaLevel: number;
-  pressure: number;
+  prs: number;
+  enc: number;
   radar: number;
   radar2: number;
 }
 
 export default function SeaLevelMonitor() {
-  // Add new state for visible series
+  const [selectedStation, setSelectedStation] = useState("colo");
+  
+  // Add new state for visible series - varies by station
   const [visibleSeries, setVisibleSeries] = useState({
-    seaLevel: true,
-    pressure: false,
+    prs: true,
+    enc: false,
     radar: false,
     radar2: false
   });
-
-  const [selectedStation, setSelectedStation] = useState("colo");
   const [selectedPeriod, setSelectedPeriod] = useState("1hr");
   const [tideData, setTideData] = useState<TideData[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -177,13 +177,13 @@ export default function SeaLevelMonitor() {
       const chartPoints: ChartDataPoint[] = extractedData
         .filter(d => d.time.trim() !== '')
         .map(d => {
-          // Sea level from pressure sensor
-          const seaLevelValue = d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs)) ?
+          // Pressure sensor (PRS)
+          const prsValue = d.prs && d.prs !== '' && !isNaN(parseFloat(d.prs)) ?
             parseFloat(d.prs) : 0;
 
-          // Atmospheric pressure
-          const pressureValue = d.ra2 && d.ra2 !== '' && !isNaN(parseFloat(d.ra2)) ?
-            parseFloat(d.ra2) : 0;
+          // Encoder (ENC)
+          const encValue = d.enc && d.enc !== '' && !isNaN(parseFloat(d.enc)) ?
+            parseFloat(d.enc) : 0;
 
           // Primary radar measurement (rad)
           const radarValue = d.rad && d.rad !== '' && !isNaN(parseFloat(d.rad)) ?
@@ -195,15 +195,15 @@ export default function SeaLevelMonitor() {
 
           return {
             time: d.time,
-            seaLevel: Number(seaLevelValue.toFixed(3)),
-            pressure: Number(pressureValue.toFixed(3)),
+            prs: Number(prsValue.toFixed(3)),
+            enc: Number(encValue.toFixed(3)),
             radar: Number(radarValue.toFixed(3)),
             radar2: Number(radar2Value.toFixed(3))
           };
         })
         .filter(point =>
-          point.seaLevel !== 0 ||
-          point.pressure !== 0 ||
+          point.prs !== 0 ||
+          point.enc !== 0 ||
           point.radar !== 0 ||
           point.radar2 !== 0
         );
@@ -220,14 +220,31 @@ export default function SeaLevelMonitor() {
     }
   };
 
-  // Effect to set the initial station from URL parameters, runs only once on mount
+  // Effect to set the initial station from URL parameters and reset chart visibility
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stationParam = params.get('station');
     if (stationParam && stations.some(s => s.id === stationParam)) {
       setSelectedStation(stationParam);
+      // Reset visible series based on station
+      if (stationParam === 'trin') {
+        setVisibleSeries({ prs: true, enc: false, radar: false, radar2: false });
+      } else {
+        setVisibleSeries({ prs: true, enc: false, radar: false, radar2: false });
+      }
     }
   }, []); // Empty dependency array ensures this runs only once after the initial render
+  
+  // Effect to update visible series when station changes
+  useEffect(() => {
+    if (selectedStation === 'trin') {
+      // For Trincomalee, show PRS and ENC
+      setVisibleSeries({ prs: true, enc: false, radar: false, radar2: false });
+    } else {
+      // For Colombo, show PRS and Radar options
+      setVisibleSeries({ prs: true, enc: false, radar: false, radar2: false });
+    }
+  }, [selectedStation]);
 
   // Effect to fetch data when station or period changes, and to handle auto-refresh
   useEffect(() => {
@@ -270,7 +287,7 @@ export default function SeaLevelMonitor() {
     } else if (latest.enc && latest.enc !== '' && !isNaN(parseFloat(latest.enc))) {
       prsValue = parseFloat(latest.enc);
     } else {
-      // If neither sea level measurement is valid, we can't show a core reading
+      // If neither PRS measurement is valid, we can't show a core reading
       return null;
     }
 
@@ -288,7 +305,7 @@ export default function SeaLevelMonitor() {
         // Compare the average of the last two points to the average of the two points before that
         // Note: recent.length will be at least 3, so indices are safe.
         const avgRecent = (recent[recent.length - 1] + recent[recent.length - 2]) / 2;
-        const avgPrevious = (recent[recent.length - 3] + recent[recent.length - 4]) / 2;
+        const avgPrevious = (recent.length > 3 ? (recent[recent.length - 3] + recent[recent.length - 4]) / 2 : recent[0]);
 
         const difference = avgRecent - avgPrevious;
 
@@ -298,15 +315,17 @@ export default function SeaLevelMonitor() {
       }
     }
 
-    const pressureData = latest.ra2 && latest.ra2 !== '' ? `${parseFloat(latest.ra2).toFixed(1)} hPa` : 'N/A';
-    const radarData = latest.rad && latest.rad !== '' ? `${parseFloat(latest.rad).toFixed(2)}m` : latest.enc && latest.enc !== '' ? `${parseFloat(latest.enc).toFixed(2)}m` : 'N/A';
+    const radar1Data = latest.rad && latest.rad !== '' ? `${parseFloat(latest.rad).toFixed(2)}m` : 'N/A';
+    const radar2Data = latest.ra2 && latest.ra2 !== '' ? `${parseFloat(latest.ra2).toFixed(2)}m` : 'N/A';
+    const encData = latest.enc && latest.enc !== '' ? `${parseFloat(latest.enc).toFixed(2)}m` : 'N/A';
 
     return {
-      seaLevel: `${prsValue.toFixed(2)}m`,
+      prs: `${prsValue.toFixed(2)}m`,
       trend,
-      pressure: pressureData,
+      enc: encData,
+      radar: radar1Data,
+      radar2: radar2Data,
       battery: latest.bat && latest.bat !== '' ? `${parseFloat(latest.bat).toFixed(1)}V` : 'N/A',
-      radar1: radarData,
       lastReading: latest.time
     };
   }, [tideData]);
@@ -323,7 +342,7 @@ export default function SeaLevelMonitor() {
     switch (trend) {
       case 'rising': return 'text-red-600';
       case 'falling': return 'text-blue-600';
-      default: return 'text-gray-600';
+      default: return 'text-black-600';
     }
   };
 
@@ -445,7 +464,7 @@ export default function SeaLevelMonitor() {
       {/* Current Conditions */}
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-blue-900 mb-8">Current Conditions</h2>
+          <h2 className="text-2xl font-bold text-black-900 mb-8">Current Conditions</h2>
 
           {currentConditions ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -456,7 +475,7 @@ export default function SeaLevelMonitor() {
                     <h3 className="text-lg font-semibold">
                       {stations.find(s => s.id === selectedStation)?.name}
                     </h3>
-                    <p className="text-sm text-gray-600 flex items-center">
+                    <p className="text-sm text-black flex items-center">
                       <MapPin className="w-4 h-4 mr-1" />
                       Live Station Data
                     </p>
@@ -466,8 +485,8 @@ export default function SeaLevelMonitor() {
 
                 <div className="space-y-3">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-900">{currentConditions.seaLevel}</div>
-                    <div className="text-sm text-gray-600">Sea Level (prs)</div>
+                    <div className="text-3xl font-bold text-blue-900">{currentConditions.prs}</div>
+                    <div className="text-sm text-black">Prs (Pressure Sensor)</div>
                   </div>
 
                   <div className="pt-3 border-t">
@@ -483,21 +502,40 @@ export default function SeaLevelMonitor() {
 
               {/* Environmental Data */}
               <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <h3 className="text-lg font-semibold mb-4">Environmental Data</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Pressure (ra2):</span>
-                    <span className="font-medium">{currentConditions.pressure}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Radar (rad):</span>
-                    <span className="font-medium">{currentConditions.radar1}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Battery:</span>
-                    <span className="font-medium">{currentConditions.battery}</span>
-                  </div>
-                </div>
+                {selectedStation === 'colo' && (
+                  <>
+                    <h3 className="text-lg font-semibold mb-4">Radar Measurements</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Radar (rad):</span>
+                        <span className="font-medium">{currentConditions.radar}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Radar 2 (ra2):</span>
+                        <span className="font-medium">{currentConditions.radar2}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Battery:</span>
+                        <span className="font-medium">{currentConditions.battery}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {selectedStation === 'trin' && (
+                  <>
+                    <h3 className="text-lg font-semibold mb-4">Sensor Measurements</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Encoder (enc):</span>
+                        <span className="font-medium">{currentConditions.enc}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Battery:</span>
+                        <span className="font-medium">{currentConditions.battery}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Data Status */}
@@ -550,44 +588,52 @@ export default function SeaLevelMonitor() {
                 <h3 className="text-xl font-semibold">Data Trends</h3>
               </div>
 
-              {/* Add series toggles */}
+              {/* Add series toggles - varies by station */}
               <div className="flex gap-4">
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={visibleSeries.seaLevel}
-                    onChange={e => setVisibleSeries({ ...visibleSeries, seaLevel: e.target.checked })}
+                    checked={visibleSeries.prs}
+                    onChange={e => setVisibleSeries({ ...visibleSeries, prs: e.target.checked })}
                     className="rounded text-blue-600"
                   />
-                  <span className="text-sm">Sea Level</span>
+                  <span className="text-sm">Prs</span>
                 </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={visibleSeries.pressure}
-                    onChange={e => setVisibleSeries({ ...visibleSeries, pressure: e.target.checked })}
-                    className="rounded text-red-600"
-                  />
-                  <span className="text-sm">Pressure</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={visibleSeries.radar}
-                    onChange={e => setVisibleSeries({ ...visibleSeries, radar: e.target.checked })}
-                    className="rounded text-green-600"
-                  />
-                  <span className="text-sm">Radar</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={visibleSeries.radar2}
-                    onChange={e => setVisibleSeries({ ...visibleSeries, radar2: e.target.checked })}
-                    className="rounded text-purple-600"
-                  />
-                  <span className="text-sm">Radar 2 (ra2)</span>
-                </label>
+                
+                {selectedStation === 'trin' && (
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={visibleSeries.enc}
+                      onChange={e => setVisibleSeries({ ...visibleSeries, enc: e.target.checked })}
+                      className="rounded text-orange-600"
+                    />
+                    <span className="text-sm">Enc</span>
+                  </label>
+                )}
+                
+                {selectedStation === 'colo' && (
+                  <>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={visibleSeries.radar}
+                        onChange={e => setVisibleSeries({ ...visibleSeries, radar: e.target.checked })}
+                        className="rounded text-green-600"
+                      />
+                      <span className="text-sm">Radar</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={visibleSeries.radar2}
+                        onChange={e => setVisibleSeries({ ...visibleSeries, radar2: e.target.checked })}
+                        className="rounded text-purple-600"
+                      />
+                      <span className="text-sm">Radar 2</span>
+                    </label>
+                  </>
+                )}
               </div>
             </div>
 
@@ -622,11 +668,14 @@ export default function SeaLevelMonitor() {
                     };
 
                     const ranges = {
-                      seaLevel: getRange(chartData.map(d => d.seaLevel)),
-                      pressure: getRange(chartData.map(d => d.pressure)),
+                      prs: getRange(chartData.map(d => d.prs)),
+                      enc: getRange(chartData.map(d => d.enc)),
                       radar: getRange(chartData.map(d => d.radar)),
                       radar2: getRange(chartData.map(d => d.radar2))
                     };
+
+                    // Color for start/end markers depending on station
+                    const stationColor = selectedStation === 'colo' ? '#2563EB' : '#D97706';
 
                     return (
                       <>
@@ -634,17 +683,17 @@ export default function SeaLevelMonitor() {
                         {Object.entries(ranges).map(([key, range], idx) => {
                           if (!visibleSeries[key as keyof typeof visibleSeries]) return null;
                           const color = {
-                            seaLevel: '#2563EB',
-                            pressure: '#DC2626',
+                            prs: '#2563EB',
+                            enc: '#D97706',
                             radar: '#059669',
                             radar2: '#7C3AED'
                           }[key];
 
                           const label = {
-                            seaLevel: 'Sea Level (m)',
-                            pressure: 'Pressure (hPa)',
+                            prs: 'Prs (m)',
+                            enc: 'ENC (m)',
                             radar: 'Radar (m)',
-                            radar2: 'Radar 2 (m)'  // Updated label
+                            radar2: 'Radar 2 (m)'
                           }[key];
 
                           return (
@@ -655,7 +704,8 @@ export default function SeaLevelMonitor() {
                                 y="150"
                                 textAnchor="middle"
                                 transform={`rotate(-90, ${45 - (idx * 40)}, 150)`}
-                                className="text-xs fill-gray-400"
+                                className="text-xs"
+                                fill="#000000"
                                 style={{ fontSize: '0.7rem' }}
                               >
                                 {label}
@@ -668,8 +718,8 @@ export default function SeaLevelMonitor() {
                                   y={256 - i * 48}
                                   textAnchor="end"
                                   className="text-xs"
-                                  fill={color}
-                                  style={{ fontSize: '0.65rem' }}
+                                  fill="#000000"
+                                  style={{ fontSize: '0.65rem', fontWeight: 600 }}
                                 >
                                   {(range.min + (range.range * i / 4)).toFixed(2)}
                                 </text>
@@ -679,43 +729,85 @@ export default function SeaLevelMonitor() {
                         })}
 
                         {/* Data series */}
-                        {visibleSeries.seaLevel && (
+                        {visibleSeries.prs && (
                           <g>
-                            {chartData.map((d, i) => {
-                              const x = 90 + (i * 650 / (chartData.length - 1));
-                              const y = 252 - ((d.seaLevel - ranges.seaLevel.min) / ranges.seaLevel.range * 192);
-                              return (
-                                <circle
-                                  key={`seaLevel-${i}`}
-                                  cx={x}
-                                  cy={y}
-                                  r="2.5"  // Smaller radius
-                                  fill="#2563EB"
-                                  stroke="white"
-                                  strokeWidth="1"  // Thinner stroke
+                            {selectedStation === 'trin' ? (
+                              <>
+                                {/* Render line for Trincomalee PRS */}
+                                <polyline
+                                  points={chartData
+                                    .map((d, i) => {
+                                      const x = 90 + (i * 650 / (chartData.length - 1));
+                                      const y = 252 - ((d.prs - ranges.prs.min) / ranges.prs.range * 192);
+                                      return `${x},${y}`;
+                                    })
+                                    .join(' ')}
+                                  fill="none"
+                                  stroke="#2563EB"
+                                  strokeWidth="1.5"
                                 />
-                              );
-                            })}
+                              </>
+                            ) : (
+                              <>
+                                {/* Render dots for Colombo PRS */}
+                                {chartData.map((d, i) => {
+                                  const x = 90 + (i * 650 / (chartData.length - 1));
+                                  const y = 252 - ((d.prs - ranges.prs.min) / ranges.prs.range * 192);
+                                  return (
+                                    <circle
+                                      key={`prs-${i}`}
+                                      cx={x}
+                                      cy={y}
+                                      r="2.5"
+                                      fill="#2563EB"
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
+                                  );
+                                })}
+                              </>
+                            )}
                           </g>
                         )}
 
-                        {visibleSeries.pressure && chartData.some(d => d.pressure !== 0) && (
+                        {visibleSeries.enc && chartData.some(d => d.enc !== 0) && (
                           <g>
-                            {chartData.map((d, i) => {
-                              const x = 90 + (i * 650 / (chartData.length - 1));
-                              const y = 252 - ((d.pressure - ranges.pressure.min) / ranges.pressure.range * 192);
-                              return d.pressure !== 0 ? (
-                                <circle
-                                  key={`pressure-${i}`}
-                                  cx={x}
-                                  cy={y}
-                                  r="2.5"  // Smaller radius
-                                  fill="#DC2626"
-                                  stroke="white"
-                                  strokeWidth="1"  // Thinner stroke
+                            {selectedStation === 'trin' ? (
+                              <>
+                                {/* Render line for Trincomalee ENC */}
+                                <polyline
+                                  points={chartData
+                                    .map((d, i) => {
+                                      const x = 90 + (i * 650 / (chartData.length - 1));
+                                      const y = 252 - ((d.enc - ranges.enc.min) / ranges.enc.range * 192);
+                                      return `${x},${y}`;
+                                    })
+                                    .join(' ')}
+                                  fill="none"
+                                  stroke="#D97706"
+                                  strokeWidth="1.5"
                                 />
-                              ) : null;
-                            })}
+                              </>
+                            ) : (
+                              <>
+                                {/* Render dots for other stations */}
+                                {chartData.map((d, i) => {
+                                  const x = 90 + (i * 650 / (chartData.length - 1));
+                                  const y = 252 - ((d.enc - ranges.enc.min) / ranges.enc.range * 192);
+                                  return d.enc !== 0 ? (
+                                    <circle
+                                      key={`enc-${i}`}
+                                      cx={x}
+                                      cy={y}
+                                      r="2.5"
+                                      fill="#D97706"
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
+                                  ) : null;
+                                })}
+                              </>
+                            )}
                           </g>
                         )}
 
@@ -781,12 +873,41 @@ export default function SeaLevelMonitor() {
                                   x={x}
                                   y="275"
                                   textAnchor="middle"
-                                  className="text-xs fill-gray-600 font-medium"
+                                  className="text-xs font-medium"
+                                  fill="#000000"
                                   transform={selectedPeriod === "month" ? `rotate(45, ${x}, 275)` : undefined}
                                 >
-                                  {selectedPeriod === "1hr" || selectedPeriod === "day"
-                                    ? d.time.substring(d.time.length - 5)
-                                    : d.time.split(' ')[0]}
+                                  {(() => {
+                                    // For short periods, show time in 12-hour format with AM/PM
+                                    if (selectedPeriod === "1hr" || selectedPeriod === "day") {
+                                      // d.time is usually "d/m/y H:M"
+                                      const parts = d.time.split(' ');
+                                      if (parts.length === 2) {
+                                        const [date, time] = parts;
+                                        let [hour, minute] = time.split(':');
+                                        hour = parseInt(hour, 10);
+                                        const ampm = hour >= 12 ? 'PM' : 'AM';
+                                        const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+                                        return `${hour12}:${minute} ${ampm}`;
+                                      }
+                                      return d.time;
+                                    } else {
+                                      // For longer periods, show readable date
+                                      const parts = d.time.split(' ');
+                                      if (parts.length > 0) {
+                                        const date = parts[0];
+                                        // Convert d/m/y to Month d, y
+                                        const [d1, m1, y1] = date.split('/');
+                                        if (d1 && m1 && y1) {
+                                          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                                          const monthName = months[parseInt(m1, 10) - 1] || m1;
+                                          return `${monthName} ${d1}, ${y1}`;
+                                        }
+                                        return date;
+                                      }
+                                      return d.time;
+                                    }
+                                  })()}
                                 </text>
                               </g>
                             );
@@ -805,10 +926,35 @@ export default function SeaLevelMonitor() {
                           x="400"
                           y="298"
                           textAnchor="middle"
-                          className="text-sm fill-gray-600 font-semibold"
+                          className="text-sm font-semibold"
+                          fill="#000000"
                         >
                           {selectedPeriod === "1hr" || selectedPeriod === "day" ? "Time (HH:MM)" : "Date"}
                         </text>
+
+                        {/* Start / End date labels (station-colored) */}
+                        {chartData.length > 0 && (() => {
+                          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                          const parseDateLabel = (t: string) => {
+                            const parts = t.split(' ');
+                            const date = parts[0] || t;
+                            const [d1, m1] = date.split('/');
+                            if (d1 && m1) return `${months[parseInt(m1, 10) - 1]} ${parseInt(d1, 10)}`;
+                            return date;
+                          };
+
+                          const startLabel = parseDateLabel(chartData[0].time);
+                          const endLabel = parseDateLabel(chartData[chartData.length - 1].time);
+                          const xStart = 90 + (0 * 650 / Math.max(chartData.length - 1, 1));
+                          const xEnd = 90 + ((chartData.length - 1) * 650 / Math.max(chartData.length - 1, 1));
+
+                          return (
+                            <>
+                              <text x={xStart} y={291} textAnchor="middle" fill={stationColor} style={{ fontSize: '0.75rem', fontWeight: 700 }}>{startLabel}</text>
+                              <text x={xEnd} y={291} textAnchor="middle" fill={stationColor} style={{ fontSize: '0.75rem', fontWeight: 700 }}>{endLabel}</text>
+                            </>
+                          );
+                        })()}
                       </>
                     );
                   })()}
@@ -833,14 +979,14 @@ export default function SeaLevelMonitor() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                      {tideData[0]?.prs !== undefined && tideData.some(d => d.prs) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sea Level (prs) m</th>)}
-                      {tideData[0]?.enc !== undefined && tideData.some(d => d.enc) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Encoder (enc) m</th>)}
-                      {tideData[0]?.ra2 !== undefined && tideData.some(d => d.ra2) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pressure (ra2) hPa</th>)}
-                      {tideData[0]?.rad !== undefined && tideData.some(d => d.rad) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Radar (rad) m</th>)}
-                      {tideData[0]?.bat !== undefined && tideData.some(d => d.bat) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Battery (bat) V</th>)}
-                      {tideData[0]?.sw1 !== undefined && tideData.some(d => d.sw1) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SW1 m</th>)}
-                      {tideData[0]?.sw2 !== undefined && tideData.some(d => d.sw2) && (<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SW2 m</th>)}
+                      <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Time</th>
+                      {tideData[0]?.prs !== undefined && tideData.some(d => d.prs) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Sea Level (prs) m</th>)}
+                      {tideData[0]?.enc !== undefined && tideData.some(d => d.enc) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Encoder (enc) m</th>)}
+                      {tideData[0]?.ra2 !== undefined && tideData.some(d => d.ra2) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Pressure (ra2) hPa</th>)}
+                      {tideData[0]?.rad !== undefined && tideData.some(d => d.rad) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Radar (rad) m</th>)}
+                      {tideData[0]?.bat !== undefined && tideData.some(d => d.bat) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">Battery (bat) V</th>)}
+                      {tideData[0]?.sw1 !== undefined && tideData.some(d => d.sw1) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">SW1 m</th>)}
+                      {tideData[0]?.sw2 !== undefined && tideData.some(d => d.sw2) && (<th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">SW2 m</th>)}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">

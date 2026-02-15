@@ -1,12 +1,15 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db, sql } from "./db";
+import { stations, measurementTypes, measurements } from "@shared/schema";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
+import type { StationSummary, Measurement, MeasurementType, Station } from "@shared/types";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
-import { insertUserSchema, insertCalendarEventSchema, insertDocumentSchema, insertRtiRequestSchema, insertContactMessageSchema } from "@shared/schema";
 // Added for data processing API
 import fsSync from "fs";
 // Added for proxy functionality
@@ -115,14 +118,14 @@ const storage_multer = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage_multer,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|ppt|pptx|txt/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -135,12 +138,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create data directory if it doesn't exist
   await fs.mkdir(DATA_DIR, { recursive: true });
-  
+
 
   // Proxy health check endpoint
   app.get("/health", (req: Request, res: Response) => {
-    res.json({ 
-      status: "healthy", 
+    res.json({
+      status: "healthy",
       timestamp: new Date().toISOString(),
       service: "Integrated Server with Proxy"
     });
@@ -159,7 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: 'Missing "url" query parameter. Usage: /proxy?url=<target-url>',
         });
       }
-      
+
       let parsedUrl: URL;
       // Validate URL
       try {
@@ -233,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       createProxyMiddleware(proxyOptions)(req, res, next);
     },
   );
-  
+
   app.post("/api/data", async (req, res) => {
     try {
       const data = req.body;
@@ -260,7 +263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status?: string;
         [key: string]: any;
       }
-      
+
       const parameterTypes: string[] = Array.from(new Set(data.map((entry: DataEntry) => entry.parameter_type).filter(Boolean)));
       interface DataItem {
         parameter_type?: string;
@@ -268,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status?: string;
         [key: string]: any;
       }
-      
+
       const locations: string[] = Array.from(new Set(data.map((entry: DataItem) => entry.location).filter(Boolean)));
 
       const generatedFiles = [];
@@ -276,16 +279,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const paramType of parameterTypes) {
         for (const location of locations) {
-            interface DataEntry {
+          interface DataEntry {
             parameter_type?: string;
             location?: string;
             status?: string;
             [key: string]: any;
-            }
-            
-            const filteredData: DataEntry[] = data.filter((entry: DataEntry) => 
+          }
+
+          const filteredData: DataEntry[] = data.filter((entry: DataEntry) =>
             entry.parameter_type === paramType && entry.location === location
-            );
+          );
           if (filteredData.length > 0) {
             const filename = `${paramType}_${location}.json`;
             await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
@@ -305,13 +308,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error('Process data error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
         message: 'Failed to process data',
         error: error.message
       });
     }
   });
+
+  // ==================== PostgreSQL API Endpoints ====================
+
+  // Dashboard endpoint - Get latest readings for all stations
+  app.get("/api/dashboard", async (req: Request, res: Response) => {
+    try {
+      // Re-implementing the logic of vw_LatestStationReadings using Drizzle
+      // This is a simplified version that gets the latest readings
+      const allStations = await storage.getAllStations();
+      const mTypes = await storage.getAllMeasurementTypes();
+
+      const dashboardData = await Promise.all(allStations.map(async (station) => {
+        const latestReading = await storage.getLatestMeasurement(station.stationId);
+
+        // This is a placeholder for the actual pivot logic if needed
+        // For now, let's just return the station info and the latest timestamp
+        const summary: any = {
+          station_id: station.stationId,
+          name: station.name,
+          latitude: station.latitude ? parseFloat(station.latitude.toString()) : null,
+          longitude: station.longitude ? parseFloat(station.longitude.toString()) : null,
+          latest_ts: latestReading?.measurementTs,
+        };
+
+        // If we need the specific parameter pivot (AT, BP, etc.), we'd query those specifically
+        // But for a migration, let's keep it simple first
+        for (const mt of mTypes) {
+          const val = await storage.getLatestMeasurement(station.stationId, mt.measurementTypeId);
+          if (val) {
+            summary[mt.code] = val.value;
+          }
+        }
+
+        return summary;
+      }));
+
+      res.json(dashboardData);
+    } catch (error: any) {
+      console.error('Dashboard API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Stations endpoint - Get all stations
+  app.get("/api/stations", async (req: Request, res: Response) => {
+    try {
+      const allStations = await storage.getAllStations();
+      res.json(allStations);
+    } catch (error: any) {
+      console.error('Stations API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Measurement types endpoint
+  app.get("/api/measurement-types", async (req: Request, res: Response) => {
+    try {
+      const types = await storage.getAllMeasurementTypes();
+      res.json(types);
+    } catch (error: any) {
+      console.error('Measurement types API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Measurements by station endpoint
+  app.get("/api/measurements/:stationId", async (req: Request, res: Response) => {
+    try {
+      const { stationId } = req.params;
+
+      if (!stationId) {
+        return res.status(400).json({ error: 'Station ID required' });
+      }
+
+      const results = await db.select({
+        measurement_ts: measurements.measurementTs,
+        value: measurements.value,
+        code: measurementTypes.code,
+        unit: measurementTypes.unit
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(eq(measurements.stationId, stationId))
+        .orderBy(desc(measurements.measurementTs))
+        .limit(500);
+
+      res.json(results);
+    } catch (error: any) {
+      console.error('Measurements API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Time-series data endpoint
+  app.get("/api/measurements/series", async (req: Request, res: Response) => {
+    try {
+      const { stationId, measurementTypeCode, startDate, endDate } = req.query;
+
+      if (!stationId || !measurementTypeCode || !startDate || !endDate) {
+        return res.status(400).json({
+          error: 'Missing required parameters: stationId, measurementTypeCode, startDate, endDate'
+        });
+      }
+
+      const results = await db.select({
+        measurement_ts: measurements.measurementTs,
+        value: measurements.value,
+        quality_flag: measurements.qualityFlag
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(and(
+          eq(measurements.stationId, stationId as string),
+          eq(measurementTypes.code, measurementTypeCode as string),
+          gte(measurements.measurementTs, new Date(startDate as string)),
+          lte(measurements.measurementTs, new Date(endDate as string))
+        ))
+        .orderBy(measurements.measurementTs);
+
+      res.json(results);
+    } catch (error: any) {
+      console.error('Time-series API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Daily average endpoint
+  app.get("/api/measurements/daily-average", async (req: Request, res: Response) => {
+    try {
+      const { stationId, measurementTypeCode, date } = req.query;
+
+      if (!stationId || !measurementTypeCode || !date) {
+        return res.status(400).json({
+          error: 'Missing required parameters: stationId, measurementTypeCode, date'
+        });
+      }
+
+      const targetDate = new Date(date as string);
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(targetDate.getDate() + 1);
+
+      const [result] = await db.select({
+        dailyAverage: sql<number>`AVG(${measurements.value})`
+      })
+        .from(measurements)
+        .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))
+        .where(and(
+          eq(measurements.stationId, stationId as string),
+          eq(measurementTypes.code, measurementTypeCode as string),
+          gte(measurements.measurementTs, targetDate),
+          lte(measurements.measurementTs, nextDay)
+        ));
+
+      res.json(result || { dailyAverage: null });
+    } catch (error: any) {
+      console.error('Daily average API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // ==================== End PostgreSQL API Endpoints ====================
+
 
   const httpServer = createServer(app);
   return httpServer;

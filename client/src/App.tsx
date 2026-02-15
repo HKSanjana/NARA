@@ -28,6 +28,12 @@ import MirissaData from './MirissaData'; // Import the component
 import MJData from '@/pages/MJData'; // Import the component
 import Dondra from '@/pages/Dondra'; // Import the component
 
+// MSSQL Dashboard Pages
+import Dashboard from '@/pages/dashboard/Dashboard';
+import Stations from '@/pages/dashboard/Stations';
+import StationDetail from '@/pages/dashboard/StationDetail';
+import Analysis from '@/pages/dashboard/Analysis';
+
 function Router() {
     return (
         <Switch>
@@ -51,8 +57,15 @@ function Router() {
             <Route path="/mirissa-data" component={MirissaData} />
             <Route path="/mjdata" component={MJData} />
             <Route path="/dondra" component={Dondra} />
+
+            {/* MSSQL Dashboard Routes */}
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/stations/:id" component={StationDetail} />
+            <Route path="/stations" component={Stations} />
+            <Route path="/analysis" component={Analysis} />
+
             <Route component={NotFound} />
-            
+
         </Switch>
     );
 }
