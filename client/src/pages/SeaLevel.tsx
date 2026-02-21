@@ -45,7 +45,7 @@ const MapComponent: React.FC = () => {
                 setLocation('/stations/SL01');
                 break;
             case 'Hambanthota':
-                setLocation('/hdVisualize');
+                setLocation('/stations/Hambanthota');
                 break;
             case 'Trincomalee':
                 setLocation('/map?station=trin');

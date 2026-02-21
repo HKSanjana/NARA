@@ -2,6 +2,7 @@
 const STATION_NAMES: Record<string, string> = {
     '0002': 'Point Pedro',
     'SL01': 'Mirissa',
+    'Hambanthota': 'Hambantota',
 };
 
 export function getStationDisplayName(name: string | undefined | null, stationId: string | undefined | null): string {
