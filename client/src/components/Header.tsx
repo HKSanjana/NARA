@@ -8,14 +8,14 @@ export default function Header() {
 
   const navItems = [
     { href: "/", label: "Home" },
-    { href: "/about", label: "About" },
-    { href: "/services", label: "Services" },
-    { href: "/divisions", label: "Divisions" },
+    // { href: "/about", label: "About" },
+    // { href: "/services", label: "Services" },
+    // { href: "/divisions", label: "Divisions" },
     { href: "/dashboard", label: "Dashboard" },
-    { href: "/downloads", label: "Downloads" },
-    { href: "/library", label: "Library" },
-    { href: "/mail", label: "Mail" },
-    { href: "/rti", label: "Right to Information" },
+    // { href: "/downloads", label: "Downloads" },
+    // { href: "/library", label: "Library" },
+    // { href: "/mail", label: "Mail" },
+    // { href: "/rti", label: "Right to Information" },
     { href: "/sea-level", label: "Sea Level" },
   ];
 
