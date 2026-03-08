@@ -4,21 +4,7 @@ import { Link } from 'wouter';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import DashboardLayout from '@core/DashboardLayout';
 import { getStationDisplayName } from '@/lib/stationNames';
-
-interface StationSummary {
-    station_id: string;
-    name: string;
-    latest_ts: string;
-    AT?: number;
-    BP?: number;
-    HU?: number;
-    RN?: number;
-    WI?: number;
-    WL?: number;
-    WT?: number;
-    latitude?: number;
-    longitude?: number;
-}
+import { api, type StationSummary } from '@/lib/api';
 
 export default function StationsPage() {
     const [stations, setStations] = useState<StationSummary[]>([]);
@@ -26,22 +12,16 @@ export default function StationsPage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        fetch('/api/dashboard')
-            .then(async res => {
-                const data = await res.json();
-                if (res.ok && Array.isArray(data)) {
-                    setStations(data);
-                } else {
-                    console.error('Invalid stations data:', data);
-                    setStations([]);
-                }
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error(err);
-                setStations([]);
-                setLoading(false);
-            });
+        // api.getDashboardData()
+        //     .then(data => {
+        //         setStations(data);
+        //         setLoading(false);
+        //     })
+        //     .catch(err => {
+        //         console.error(err);
+        //         setStations([]);
+        //         setLoading(false);
+        //     });
     }, []);
 
     const filteredStations = stations.filter(s =>
@@ -182,7 +162,7 @@ export default function StationsPage() {
                                                     <span className="pulse"></span> Active
                                                 </div>
                                             </td>
-                                            <td>{new Date(station.latest_ts).toLocaleString()}</td>
+                                            <td>{station.latest_ts ? new Date(station.latest_ts).toLocaleString() : 'N/A'}</td>
                                             <td>
                                                 <Link href={`/stations/${station.station_id}`}>
                                                     <a>

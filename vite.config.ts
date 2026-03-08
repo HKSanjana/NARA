@@ -29,6 +29,13 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     host: true,
+    proxy: {
+      "/proxy": {
+        target: "https://www.ioc-sealevelmonitoring.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/proxy/, ""),
+      },
+    },
   },
   assetsInclude: ["**/*.xlsx"],
 });

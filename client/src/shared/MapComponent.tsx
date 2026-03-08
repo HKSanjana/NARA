@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Waves, TrendingUp, MapPin, Calendar, Thermometer, Wind, Droplets, RefreshCw } from "lucide-react";
 import myImage1 from '@/assets/new5.jpg';
+import { api } from "@/lib/api";
 
 // Define types for the real tide data
 interface TideData {
@@ -122,17 +123,8 @@ export default function SeaLevelMonitor() {
   const fetchRealTideData = async (stationCode: string, periodCode: string) => {
     setIsLoading(true);
     try {
-      // Construct the targetUrl with the encoded URL parameter
-      const encodedUrl = encodeURIComponent(`https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`);
-      const targetUrl = `/proxy?url=${encodedUrl}`;
-      const response = await fetch(targetUrl);
-
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const text = await response.text();
+      // Use the real proxy mechanism via our API service
+      const text = await api.getIOCData(stationCode, periodCode);
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
 
