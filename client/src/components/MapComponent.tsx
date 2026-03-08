@@ -24,7 +24,7 @@ interface ChartDataPoint {
 
 export default function SeaLevelMonitor() {
   const [selectedStation, setSelectedStation] = useState("colo");
-  
+
   // Add new state for visible series - varies by station
   const [visibleSeries, setVisibleSeries] = useState({
     prs: true,
@@ -101,16 +101,16 @@ export default function SeaLevelMonitor() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    
+
     // Find the selected station's name for the filename
     const stationName = stations.find(s => s.id === selectedStation)?.name.replace(/\s/g, '_') || 'data';
-    
+
     // Find the selected period's name for the filename
     const periodName = periods.find(p => p.id === selectedPeriod)?.name.replace(/\s/g, '_') || 'data';
-    
+
     // Use the selected period's name in the download filename
     link.setAttribute('download', `${stationName}_${periodName}_data.csv`);
-    
+
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -124,7 +124,7 @@ export default function SeaLevelMonitor() {
     try {
       // Construct the targetUrl with the encoded URL parameter
       const encodedUrl = encodeURIComponent(`https://www.ioc-sealevelmonitoring.org/bgraph.php?code=${stationCode}&output=tab&period=${periodCode}`);
-      const targetUrl = `http://localhost:5000/proxy?url=${encodedUrl}`;
+      const targetUrl = `/proxy?url=${encodedUrl}`;
       const response = await fetch(targetUrl);
 
 
@@ -234,7 +234,7 @@ export default function SeaLevelMonitor() {
       }
     }
   }, []); // Empty dependency array ensures this runs only once after the initial render
-  
+
   // Effect to update visible series when station changes
   useEffect(() => {
     if (selectedStation === 'trin') {
@@ -445,7 +445,7 @@ export default function SeaLevelMonitor() {
                     </option>
                   ))}
                 </select>
-              </div>      
+              </div>
 
               {/* MODIFIED: Always show the Historical Data download button */}
               <button
@@ -454,7 +454,7 @@ export default function SeaLevelMonitor() {
               >
                 Download Data
               </button>
-              
+
             </div>
             <p className="text-sm text-gray-500">Last updated: {lastUpdated}</p>
           </div>
@@ -599,7 +599,7 @@ export default function SeaLevelMonitor() {
                   />
                   <span className="text-sm">Prs</span>
                 </label>
-                
+
                 {selectedStation === 'trin' && (
                   <label className="flex items-center space-x-2">
                     <input
@@ -611,7 +611,7 @@ export default function SeaLevelMonitor() {
                     <span className="text-sm">Enc</span>
                   </label>
                 )}
-                
+
                 {selectedStation === 'colo' && (
                   <>
                     <label className="flex items-center space-x-2">
@@ -885,9 +885,9 @@ export default function SeaLevelMonitor() {
                                       if (parts.length === 2) {
                                         const [date, time] = parts;
                                         let [hour, minute] = time.split(':');
-                                        hour = parseInt(hour, 10);
-                                        const ampm = hour >= 12 ? 'PM' : 'AM';
-                                        const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+                                        const hourNum = parseInt(hour, 10);
+                                        const ampm = hourNum >= 12 ? 'PM' : 'AM';
+                                        const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
                                         return `${hour12}:${minute} ${ampm}`;
                                       }
                                       return d.time;

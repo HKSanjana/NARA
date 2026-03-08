@@ -1,9 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db, sql } from "./db";
+import { db } from "./db";
 import { stations, measurementTypes, measurements } from "@shared/schema";
-import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import type { StationSummary, Measurement, MeasurementType, Station } from "@shared/types";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -12,8 +12,7 @@ import path from "path";
 import fs from "fs/promises";
 // Added for data processing API
 import fsSync from "fs";
-// Added for proxy functionality
-import { createProxyMiddleware, Options } from "http-proxy-middleware";
+// Proxy functionality now uses native fetch (Vercel serverless compatible)
 
 // Define data directory path
 export const DATA_DIR = path.join(process.cwd(), "client/src/data");
@@ -149,93 +148,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Proxy endpoint with query parameter
-  app.use(
-    "/proxy",
-    rateLimiter,
-    (req: Request, res: Response, next: NextFunction) => {
-      const targetUrl = req.query.url as string;
+  // Proxy endpoint with query parameter (fetch-based, Vercel serverless compatible)
+  app.get("/proxy", rateLimiter, async (req: Request, res: Response) => {
+    const targetUrl = req.query.url as string;
 
-      if (!targetUrl) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: 'Missing "url" query parameter. Usage: /proxy?url=<target-url>',
+    if (!targetUrl) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: 'Missing "url" query parameter. Usage: /proxy?url=<target-url>',
+      });
+    }
+
+    let parsedUrl: URL;
+    // Validate URL
+    try {
+      parsedUrl = new URL(targetUrl);
+
+      // Security: Block internal/private URLs
+      if (isBlockedDomain(targetUrl)) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Cannot proxy requests to internal/private URLs",
         });
       }
 
-      let parsedUrl: URL;
-      // Validate URL
-      try {
-        parsedUrl = new URL(targetUrl);
-
-        // Security: Block internal/private URLs
-        if (isBlockedDomain(targetUrl)) {
-          return res.status(403).json({
-            error: "Forbidden",
-            message: "Cannot proxy requests to internal/private URLs",
-          });
-        }
-
-        // Only allow http and https protocols
-        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-          return res.status(400).json({
-            error: "Bad Request",
-            message: "Only HTTP and HTTPS protocols are supported",
-          });
-        }
-      } catch (error) {
+      // Only allow http and https protocols
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
         return res.status(400).json({
           error: "Bad Request",
-          message: "Invalid URL provided",
+          message: "Only HTTP and HTTPS protocols are supported",
         });
       }
+    } catch (error) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Invalid URL provided",
+      });
+    }
 
-      // Create proxy options
-      const proxyOptions: Options = {
-        // 👇 **CHANGE 1**: Target is now just the origin of the parsed URL.
-        target: parsedUrl.origin,
-        changeOrigin: true,
-        // 👇 **CHANGE 2**: PathRewrite now replaces the request path with the path and query from the target URL.
-        pathRewrite: (path: string, req: any) => {
-          return parsedUrl.pathname + parsedUrl.search;
+    try {
+      // Use native fetch to proxy the request (serverless compatible)
+      const proxyResponse = await fetch(targetUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Integrated-Server-Proxy/1.0",
         },
-        onProxyReq: (proxyReq: any, req: any) => {
-          // Remove sensitive headers
-          proxyReq.removeHeader("cookie");
-          proxyReq.removeHeader("cookie2");
-          proxyReq.removeHeader("authorization");
+      });
 
-          // Set custom user agent
-          proxyReq.setHeader("User-Agent", "Integrated-Server-Proxy/1.0");
-        },
-        onProxyRes: (proxyRes: any) => {
-          // Add custom headers
-          proxyRes.headers["x-proxied-by"] = "integrated-server-proxy";
-          proxyRes.headers["x-request-url"] = targetUrl;
-          proxyRes.headers["access-control-allow-origin"] = "*";
-          proxyRes.headers["access-control-expose-headers"] = "*";
+      // Set response headers
+      res.set("x-proxied-by", "integrated-server-proxy");
+      res.set("x-request-url", targetUrl);
+      res.set("access-control-allow-origin", "*");
+      res.set("access-control-expose-headers", "*");
 
-          // Remove set-cookie headers for security
-          delete proxyRes.headers["set-cookie"];
-          delete proxyRes.headers["set-cookie2"];
-        },
-        onError: (err: any, req: any, res: any) => {
-          console.error("Proxy error:", err.message);
-          const response = res as Response;
-          if (!response.headersSent) {
-            response.status(502).json({
-              error: "Bad Gateway",
-              message: "Failed to proxy request",
-              details: err.message,
-            });
-          }
-        },
-        logLevel: "warn",
-      } as any;
+      // Forward content type
+      const contentType = proxyResponse.headers.get("content-type");
+      if (contentType) {
+        res.set("content-type", contentType);
+      }
 
-      createProxyMiddleware(proxyOptions)(req, res, next);
-    },
-  );
+      // Forward status and body
+      const body = await proxyResponse.text();
+      res.status(proxyResponse.status).send(body);
+    } catch (err: any) {
+      console.error("Proxy error:", err.message);
+      if (!res.headersSent) {
+        res.status(502).json({
+          error: "Bad Gateway",
+          message: "Failed to proxy request",
+          details: err.message,
+        });
+      }
+    }
+  });
 
   app.post("/api/data", async (req, res) => {
     try {
@@ -457,7 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       nextDay.setDate(targetDate.getDate() + 1);
 
       const [result] = await db.select({
-        dailyAverage: sql<number>`AVG(${measurements.value})`
+        dailyAverage: sql`AVG(${measurements.value})`.mapWith(Number)
       })
         .from(measurements)
         .innerJoin(measurementTypes, eq(measurements.measurementTypeId, measurementTypes.measurementTypeId))

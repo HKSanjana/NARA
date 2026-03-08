@@ -5,7 +5,8 @@ import { setupVite, serveStatic, log } from "./vite";
 import { networkInterfaces } from 'os';
 
 const app = express();
- // ⛔️ FIX: Increase the request body size limit here
+export { app };
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -39,7 +40,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+const startServer = async () => {
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -50,26 +51,24 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   server.listen(port, '0.0.0.0', () => {
     console.log(`Server running on:`);
     console.log(`- Local:   http://localhost:${port}`);
     console.log(`- Network: http://${getLocalIpAddress()}:${port}`);
   });
-})();
+};
+
+// Only start the server if we're not running as a Vercel serverless function
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  startServer();
+}
 
 function getLocalIpAddress(): string {
   const nets = networkInterfaces();
