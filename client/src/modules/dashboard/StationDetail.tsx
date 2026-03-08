@@ -1,22 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useRoute } from 'wouter';
+import { useRoute, Link } from 'wouter';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Wind, Thermometer, Droplets, Activity, CloudRain, Waves, Clock, MapPin, ChevronLeft } from 'lucide-react';
-import { Link } from 'wouter';
 import DashboardLayout from '@core/DashboardLayout';
 import { getStationDisplayName } from '@/lib/stationNames';
-
-interface StationSummary {
-    station_id: string;
-    name: string;
-    latest_ts: string;
-    AT?: number;
-    WL?: number;
-    HU?: number;
-    RN?: number;
-    latitude?: number;
-    longitude?: number;
-}
+import { api, type StationSummary } from '@/lib/api';
 
 interface Measurement {
     measurement_ts: string;
@@ -36,30 +24,21 @@ export default function StationDetail() {
     useEffect(() => {
         if (!id) return;
 
-        // Fetch station summary
-        fetch('/api/dashboard')
-            .then(res => res.json())
-            .then(data => {
-                const found = data.find((s: StationSummary) => s.station_id === id);
-                if (found) setStation(found);
-            })
-            .catch(console.error);
+        setLoading(true);
 
-        // Fetch history
-        fetch(`/api/measurements/${id}`)
-            .then(async res => {
-                const data = await res.json();
-                if (res.ok && Array.isArray(data)) {
-                    setHistory(data);
-                } else {
-                    console.error('Failed to fetch history:', data);
-                    setHistory([]);
-                }
+        // Fetch station summary and history in parallel
+        Promise.all([
+            api.getDashboardData(),
+            api.getMeasurements(id)
+        ])
+            .then(([dashboard, measurements]) => {
+                const found = dashboard.find(s => s.station_id === id);
+                if (found) setStation(found);
+                setHistory(measurements);
                 setLoading(false);
             })
             .catch(err => {
                 console.error(err);
-                setHistory([]);
                 setLoading(false);
             });
     }, [id]);
@@ -113,7 +92,7 @@ export default function StationDetail() {
                                         : `Station ID: ${id}`}
                                 </span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Clock size={16} /> Last Update: {new Date(station.latest_ts).toLocaleString()}
+                                    <Clock size={16} /> Last Update: {station.latest_ts ? new Date(station.latest_ts).toLocaleString() : 'Never'}
                                 </span>
                             </div>
                         </div>

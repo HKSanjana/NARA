@@ -3,18 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Wind, Thermometer, Droplets, Activity, CloudRain, Waves, Shield } from 'lucide-react';
 import DashboardLayout from '@core/DashboardLayout';
 import { getStationDisplayName } from '@/lib/stationNames';
-
-interface StationSummary {
-    station_id: string;
-    name: string;
-    AT?: number;
-    WL?: number;
-    HU?: number;
-    RN?: number;
-    BP?: number;
-    WI?: number;
-    WT?: number;
-}
+import { api, type StationSummary } from '@/lib/api';
 
 const METRICS = [
     { code: 'AT', name: 'Air Temperature', unit: '°C', icon: Thermometer, color: '#f87171' },
@@ -32,15 +21,9 @@ export default function AnalysisPage() {
     const [selectedMetric, setSelectedMetric] = useState(METRICS[1]); // Default to WL
 
     useEffect(() => {
-        fetch('/api/dashboard')
-            .then(async res => {
-                const data = await res.json();
-                if (res.ok && Array.isArray(data)) {
-                    setStations(data);
-                } else {
-                    console.error('Invalid analysis data:', data);
-                    setStations([]);
-                }
+        api.getDashboardData()
+            .then(data => {
+                setStations(data);
                 setLoading(false);
             })
             .catch(err => {

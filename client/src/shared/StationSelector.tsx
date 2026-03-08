@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 
 interface Station {
     station_id: string;
@@ -15,16 +16,11 @@ export default function StationSelector({ onSelectStation }: StationSelectorProp
 
     useEffect(() => {
         const fetchStations = async () => {
-            try {
-                const response = await fetch('/api/stations');
-                const data: Station[] = await response.json();
-                setStations(data);
-                if (data.length > 0) {
-                    setSelectedStation(data[0].station_id);
-                    onSelectStation(data[0].station_id);
-                }
-            } catch (error) {
-                console.error('Error fetching stations:', error);
+            const data = await api.getStations();
+            setStations(data);
+            if (data.length > 0) {
+                setSelectedStation(data[0].station_id);
+                onSelectStation(data[0].station_id);
             }
         };
         fetchStations();

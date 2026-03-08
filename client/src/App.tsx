@@ -21,7 +21,7 @@ import SeaLevel from "@modules/ocean-data/SeaLevel";
 import HistoricalDataVisualize from "@modules/ocean-data/HistoricalDataVisualize";
 import Dondra from "@modules/ocean-data/Dondra";
 import MirissaData from "@modules/ocean-data/MirissaData";
-import MJData from "@modules/ocean-data/MJData";
+// MJData legacy import removed
 
 // Calendar Module
 import Calendar from "@modules/calendar/Calendar";
@@ -59,7 +59,6 @@ function Router() {
             <Route path="/map" component={MapComponent} />
             <Route path="/data-visualization" component={DataVisualization} />
             <Route path="/mirissa-data" component={MirissaData} />
-            <Route path="/mjdata" component={MJData} />
             <Route path="/dondra" component={Dondra} />
 
             {/* MSSQL Dashboard Routes */}

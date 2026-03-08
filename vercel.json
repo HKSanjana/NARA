@@ -6,6 +6,10 @@
       "destination": "https://www.ioc-sealevelmonitoring.org/$1"
     },
     {
+      "source": "/neon-proxy/(.*)",
+      "destination": "https://ep-winter-hat-ah729wyr-pooler.c-3.us-east-1.aws.neon.tech/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

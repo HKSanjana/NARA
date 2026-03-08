@@ -3,21 +3,7 @@ import { Wind, Thermometer, Droplets, Activity, CloudRain, Waves, ArrowUpRight, 
 import { Link } from 'wouter';
 import DashboardLayout from '@core/DashboardLayout';
 import { getStationDisplayName } from '@/lib/stationNames';
-
-interface StationSummary {
-    station_id: string;
-    name: string;
-    latest_ts: string;
-    AT?: number;
-    BP?: number;
-    HU?: number;
-    RN?: number;
-    WI?: number;
-    WL?: number;
-    WT?: number;
-    latitude?: number;
-    longitude?: number;
-}
+import { api, type StationSummary } from '@/lib/api';
 
 export default function Dashboard() {
     const [stations, setStations] = useState<StationSummary[]>([]);
@@ -25,15 +11,9 @@ export default function Dashboard() {
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        fetch('/api/dashboard')
-            .then(async res => {
-                const data = await res.json();
-                if (res.ok && Array.isArray(data)) {
-                    setStations(data);
-                } else {
-                    console.error('Invalid dashboard data:', data);
-                    setStations([]);
-                }
+        api.getDashboardData()
+            .then(data => {
+                setStations(data);
                 setLoading(false);
             })
             .catch(err => {
@@ -141,7 +121,7 @@ export default function Dashboard() {
                                         </div>
 
                                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span className="timestamp">Updated {new Date(station.latest_ts).toLocaleTimeString()}</span>
+                                            <span className="timestamp">Updated {station.latest_ts ? new Date(station.latest_ts).toLocaleTimeString() : 'Never'}</span>
                                             <span style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600 }}>VIEW DETAILS</span>
                                         </div>
                                     </div>

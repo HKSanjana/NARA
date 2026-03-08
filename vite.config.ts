@@ -19,6 +19,7 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  envDir: path.resolve(import.meta.dirname),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
@@ -34,6 +35,11 @@ export default defineConfig({
         target: "https://www.ioc-sealevelmonitoring.org",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/proxy/, ""),
+      },
+      "/neon-proxy": {
+        target: "https://ep-winter-hat-ah729wyr-pooler.c-3.us-east-1.aws.neon.tech",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/neon-proxy/, ""),
       },
     },
   },

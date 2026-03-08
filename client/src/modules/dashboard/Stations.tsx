@@ -12,16 +12,16 @@ export default function StationsPage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        // api.getDashboardData()
-        //     .then(data => {
-        //         setStations(data);
-        //         setLoading(false);
-        //     })
-        //     .catch(err => {
-        //         console.error(err);
-        //         setStations([]);
-        //         setLoading(false);
-        //     });
+        api.getDashboardData()
+            .then(data => {
+                setStations(data);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setStations([]);
+                setLoading(false);
+            });
     }, []);
 
     const filteredStations = stations.filter(s =>

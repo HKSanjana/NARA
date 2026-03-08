@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 
 interface MeasurementType {
     measurement_type_id: number;
@@ -17,16 +18,11 @@ export default function MeasurementTypeSelector({ onSelectMeasurementType }: Mea
 
     useEffect(() => {
         const fetchMeasurementTypes = async () => {
-            try {
-                const response = await fetch('/api/measurement-types');
-                const data: MeasurementType[] = await response.json();
-                setMeasurementTypes(data);
-                if (data.length > 0) {
-                    setSelectedMeasurementType(data[0].code);
-                    onSelectMeasurementType(data[0].code);
-                }
-            } catch (error) {
-                console.error('Error fetching measurement types:', error);
+            const data = await api.getMeasurementTypes();
+            setMeasurementTypes(data);
+            if (data.length > 0) {
+                setSelectedMeasurementType(data[0].code);
+                onSelectMeasurementType(data[0].code);
             }
         };
         fetchMeasurementTypes();
