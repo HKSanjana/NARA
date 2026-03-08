@@ -1,0 +1,34 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    runtimeErrorOverlay(),
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@core": path.resolve(import.meta.dirname, "client", "src", "core"),
+      "@modules": path.resolve(import.meta.dirname, "client", "src", "modules"),
+      "@shared": path.resolve(import.meta.dirname, "client", "src", "shared"),
+      "@ui": path.resolve(import.meta.dirname, "client", "src", "ui"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+    },
+  },
+  root: path.resolve(import.meta.dirname, "client"),
+  build: {
+    outDir: path.resolve(import.meta.dirname, "dist"),
+    emptyOutDir: true,
+  },
+  server: {
+    fs: {
+      strict: true,
+      deny: ["**/.*"],
+    },
+    host: true,
+  },
+  assetsInclude: ["**/*.xlsx"],
+});
