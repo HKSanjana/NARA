@@ -1,38 +1,45 @@
-// src/App.tsx
-
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import Layout from "@/components/Layout";
-import Home from "@/pages/Home";
-import About from "@/pages/About";
-import Services from "@/pages/Services";
-import Divisions from "@/pages/Divisions";
-import Downloads from "@/pages/Downloads";
-import Library from "@/pages/Library";
-import Mail from "@/pages/Mail";
-import RTI from "@/pages/RTI";
-import SeaLevel from "@/pages/SeaLevel";
-import Contact from "@/pages/Contact";
-import Calendar from "@/pages/Calendar";
-import AdminLogin from "@/pages/admin/AdminLogin";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import UserProfiles from "@/pages/admin/UserProfiles";
-import HistoricalDataVisualize from "@/pages/HistoricalDataVisualize";
-import MapComponent from "@/components/MapComponent";
-import DataVisualization from './DataVisualization'; // Import the component
-import MirissaData from './MirissaData'; // Import the component
-import MJData from '@/pages/MJData'; // Import the component
-import Dondra from '@/pages/Dondra'; // Import the component
+import { Toaster } from "@ui/toaster";
+import { TooltipProvider } from "@ui/tooltip";
+import NotFound from "@core/not-found";
+import Layout from "@core/Layout";
 
-// MSSQL Dashboard Pages
-import Dashboard from '@/pages/dashboard/Dashboard';
-import Stations from '@/pages/dashboard/Stations';
-import StationDetail from '@/pages/dashboard/StationDetail';
-import Analysis from '@/pages/dashboard/Analysis';
+// Home Module
+import Home from "@modules/home/Home";
+
+// Info Module
+import About from "@modules/info/About";
+import Contact from "@modules/info/Contact";
+import Services from "@modules/info/Services";
+import RTI from "@modules/info/RTI";
+import Library from "@modules/info/Library";
+
+// Ocean Data Module
+import SeaLevel from "@modules/ocean-data/SeaLevel";
+import HistoricalDataVisualize from "@modules/ocean-data/HistoricalDataVisualize";
+import Dondra from "@modules/ocean-data/Dondra";
+import MirissaData from "@modules/ocean-data/MirissaData";
+// MJData legacy import removed
+
+// Calendar Module
+import Calendar from "@modules/calendar/Calendar";
+
+// Admin Module
+import AdminLogin from "@modules/admin/AdminLogin";
+import AdminDashboard from "@modules/admin/AdminDashboard";
+import UserProfiles from "@modules/admin/UserProfiles";
+
+// Dashboard Module
+import Dashboard from "@modules/dashboard/Dashboard";
+import Stations from "@modules/dashboard/Stations";
+import StationDetail from "@modules/dashboard/StationDetail";
+import Analysis from "@modules/dashboard/Analysis";
+
+// Shared Components
+import MapComponent from "@shared/MapComponent";
+import DataVisualization from "@shared/DataVisualization";
 
 function Router() {
     return (
@@ -40,10 +47,7 @@ function Router() {
             <Route path="/" component={Home} />
             <Route path="/about" component={About} />
             <Route path="/services" component={Services} />
-            <Route path="/divisions" component={Divisions} />
-            <Route path="/downloads" component={Downloads} />
             <Route path="/library" component={Library} />
-            <Route path="/mail" component={Mail} />
             <Route path="/rti" component={RTI} />
             <Route path="/sea-level" component={SeaLevel} />
             <Route path="/hdVisualize" component={HistoricalDataVisualize} />
@@ -55,7 +59,6 @@ function Router() {
             <Route path="/map" component={MapComponent} />
             <Route path="/data-visualization" component={DataVisualization} />
             <Route path="/mirissa-data" component={MirissaData} />
-            <Route path="/mjdata" component={MJData} />
             <Route path="/dondra" component={Dondra} />
 
             {/* MSSQL Dashboard Routes */}
@@ -65,7 +68,6 @@ function Router() {
             <Route path="/analysis" component={Analysis} />
 
             <Route component={NotFound} />
-
         </Switch>
     );
 }
@@ -84,17 +86,3 @@ function App() {
 }
 
 export default App;
-
-
-
-
-
-
-
-
-
-
-
-
-
-

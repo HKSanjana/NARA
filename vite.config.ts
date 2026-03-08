@@ -7,25 +7,21 @@ export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@core": path.resolve(import.meta.dirname, "client", "src", "core"),
+      "@modules": path.resolve(import.meta.dirname, "client", "src", "modules"),
+      "@shared": path.resolve(import.meta.dirname, "client", "src", "shared"),
+      "@ui": path.resolve(import.meta.dirname, "client", "src", "ui"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  envDir: path.resolve(import.meta.dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
   server: {
@@ -33,9 +29,19 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-    host: true, // Add this to listen on all addresses
-    // port: 3000, // Specify port (optional)
+    host: true,
+    proxy: {
+      "/proxy": {
+        target: "https://www.ioc-sealevelmonitoring.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/proxy/, ""),
+      },
+      "/neon-proxy": {
+        target: "https://ep-winter-hat-ah729wyr-pooler.c-3.us-east-1.aws.neon.tech",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/neon-proxy/, ""),
+      },
+    },
   },
-  // <-- Added this to handle .xlsx files
   assetsInclude: ["**/*.xlsx"],
 });
