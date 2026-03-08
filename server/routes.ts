@@ -324,42 +324,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== PostgreSQL API Endpoints ====================
 
-  // Dashboard endpoint - Get latest readings for all stations
+  // Dashboard endpoint - Get latest readings for all stations (Optimized)
   app.get("/api/dashboard", async (req: Request, res: Response) => {
     try {
-      // Re-implementing the logic of vw_LatestStationReadings using Drizzle
-      // This is a simplified version that gets the latest readings
+      // Step 1: Get all stations
       const allStations = await storage.getAllStations();
       const mTypes = await storage.getAllMeasurementTypes();
 
-      const dashboardData = await Promise.all(allStations.map(async (station) => {
-        const latestReading = await storage.getLatestMeasurement(station.stationId);
+      // Step 2: Use a single query to get the latest measurement for EVERY station and type
+      // Using DISTINCT ON is the most efficient way in PostgreSQL to get the "latest" row per group
+      const latestMeasurements = await db.execute(sql`
+        SELECT DISTINCT ON (station_id, measurement_type_id)
+          station_id, measurement_type_id, value, measurement_ts
+        FROM ${measurements}
+        ORDER BY station_id, measurement_type_id, measurement_ts DESC
+      `);
 
-        // This is a placeholder for the actual pivot logic if needed
-        // For now, let's just return the station info and the latest timestamp
+      const measurementsByStation: Record<string, any[]> = {};
+      (latestMeasurements.rows as any[]).forEach(m => {
+        if (!measurementsByStation[m.station_id]) {
+          measurementsByStation[m.station_id] = [];
+        }
+        measurementsByStation[m.station_id].push(m);
+      });
+
+      const dashboardData = allStations.map(station => {
+        const stationMeasurements = measurementsByStation[station.stationId] || [];
         const summary: any = {
           station_id: station.stationId,
           name: station.name,
           latitude: station.latitude ? parseFloat(station.latitude.toString()) : null,
           longitude: station.longitude ? parseFloat(station.longitude.toString()) : null,
-          latest_ts: latestReading?.measurementTs,
+          latest_ts: stationMeasurements.length > 0 ?
+            new Date(Math.max(...stationMeasurements.map(m => new Date(m.measurement_ts).getTime()))).toISOString() : null,
         };
 
-        // If we need the specific parameter pivot (AT, BP, etc.), we'd query those specifically
-        // But for a migration, let's keep it simple first
-        for (const mt of mTypes) {
-          const val = await storage.getLatestMeasurement(station.stationId, mt.measurementTypeId);
-          if (val) {
-            summary[mt.code] = val.value;
+        // Map parameter codes to values
+        mTypes.forEach(mt => {
+          const match = stationMeasurements.find(m => m.measurement_type_id === mt.measurementTypeId);
+          if (match) {
+            summary[mt.code] = match.value;
           }
-        }
+        });
 
         return summary;
-      }));
+      });
 
       res.json(dashboardData);
     } catch (error: any) {
       console.error('Dashboard API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Divisions endpoint
+  app.get("/api/divisions", async (req: Request, res: Response) => {
+    try {
+      const allDivisions = await storage.getAllDivisions();
+      res.json(allDivisions);
+    } catch (error: any) {
+      console.error('Divisions API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Calendar events endpoint
+  app.get("/api/calendar/events/:year/:month", async (req: Request, res: Response) => {
+    try {
+      const { year, month } = req.params;
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+
+      const events = await storage.getCalendarEvents(startDate, endDate);
+      res.json(events);
+    } catch (error: any) {
+      console.error('Calendar API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // Documents endpoint
+  app.get("/api/documents", async (req: Request, res: Response) => {
+    try {
+      const { category, divisionId } = req.query;
+      let documents;
+
+      if (category) {
+        documents = await storage.getDocumentsByCategory(category as string);
+      } else if (divisionId) {
+        documents = await storage.getDocumentsByDivision(divisionId as string);
+      } else {
+        documents = await storage.getAllDocuments();
+      }
+
+      res.json(documents);
+    } catch (error: any) {
+      console.error('Documents API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  // RTI Requests endpoint (Public POST, Admin GET)
+  app.get("/api/rti/requests", authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const requests = await storage.getAllRtiRequests();
+      res.json(requests);
+    } catch (error: any) {
+      console.error('RTI Requests API error:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  app.post("/api/rti/requests", async (req: Request, res: Response) => {
+    try {
+      const newRequest = await storage.createRtiRequest(req.body);
+      res.status(201).json(newRequest);
+    } catch (error: any) {
+      console.error('Create RTI Request error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
     }
   });
