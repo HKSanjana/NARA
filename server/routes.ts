@@ -135,8 +135,14 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
-  // Create data directory if it doesn't exist
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  // Create data directory if it doesn't exist (only if not on Vercel)
+  if (!process.env.VERCEL) {
+    try {
+      await fs.mkdir(DATA_DIR, { recursive: true });
+    } catch (e) {
+      console.warn("Could not create DATA_DIR, skipping filesystem features:", e);
+    }
+  }
 
 
   // Proxy health check endpoint
@@ -236,10 +242,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logMessage += `  - Raw JSON: ${JSON.stringify(data)}\n`;
       }
 
-      // Write log
-      await fs.appendFile(path.join(DATA_DIR, "data_log.txt"), logMessage);
-      // Save received data
-      await fs.writeFile(path.join(DATA_DIR, "received_data.json"), JSON.stringify(data, null, 2));
+      // Write log (skip or catch on Vercel)
+      if (!process.env.VERCEL) {
+        try {
+          await fs.appendFile(path.join(DATA_DIR, "data_log.txt"), logMessage);
+          await fs.writeFile(path.join(DATA_DIR, "received_data.json"), JSON.stringify(data, null, 2));
+        } catch (e) {
+          console.warn("Filesystem write failed:", e);
+        }
+      }
 
       // New processing logic: Create Cartesian product of parameter types and locations
       interface DataEntry {
@@ -276,8 +287,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           if (filteredData.length > 0) {
             const filename = `${paramType}_${location}.json`;
-            await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
-            generatedFiles.push(filename);
+
+            // File write (skip or catch on Vercel)
+            if (!process.env.VERCEL) {
+              try {
+                await fs.writeFile(path.join(DATA_DIR, filename), JSON.stringify(filteredData, null, 2));
+                generatedFiles.push(filename);
+              } catch (e) {
+                console.warn(`Could not write ${filename}:`, e);
+              }
+            } else {
+              generatedFiles.push(`${filename} (simulated)`);
+            }
             totalProcessedEntries += filteredData.length;
           }
         }
