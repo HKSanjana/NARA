@@ -50,7 +50,22 @@ export default function StationDetail() {
             case 'HU': return <Droplets className="w-5 h-5 text-cyan-400" />;
             case 'RN': return <CloudRain className="w-5 h-5 text-indigo-400" />;
             case 'WI': return <Wind className="w-5 h-5 text-gray-400" />;
+            case 'BP': return <Activity className="w-5 h-5 text-purple-400" />;
+            case 'WT': return <Thermometer className="w-5 h-5 text-teal-400" />;
             default: return <Activity className="w-5 h-5 text-gray-400" />;
+        }
+    };
+
+    const getMetricFullName = (code: string) => {
+        switch (code) {
+            case 'AT': return `${code} - Air Temperature`;
+            case 'WL': return `${code} - Water Level`;
+            case 'HU': return `${code} - Humidity`;
+            case 'RN': return `${code} - Rainfall`;
+            case 'WI': return `${code} - Wind`;
+            case 'BP': return `${code} - Air Pressure`;
+            case 'WT': return `${code} - Water Temperature`;
+            default: return code;
         }
     };
 
@@ -109,7 +124,7 @@ export default function StationDetail() {
                         return (latest && (
                             <div key={code} className="stat-card glass">
                                 <div className="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    {getIcon(code)} {code}
+                                    {getIcon(code)} {getMetricFullName(code)}
                                 </div>
                                 <div className="stat-value">
                                     {(latest.value !== null && latest.value !== undefined) ? latest.value.toFixed(2) : '--'}
@@ -130,7 +145,7 @@ export default function StationDetail() {
                         return (
                             <div key={code} className="card glass station-card">
                                 <h3 className="chart-title" style={{ color: '#fff' }}>
-                                    {getIcon(code)} {code} Analysis (Last 24h)
+                                    {getIcon(code)} {getMetricFullName(code)}
                                 </h3>
                                 <div className="chart-container">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -181,7 +196,7 @@ export default function StationDetail() {
                                 const headers = ['Timestamp', 'Metric', 'Value', 'Unit'];
                                 const rows = history.map(m => [
                                     new Date(m.measurement_ts).toLocaleString(),
-                                    m.code,
+                                    getMetricFullName(m.code),
                                     m.value,
                                     m.unit || ''
                                 ]);
@@ -218,7 +233,7 @@ export default function StationDetail() {
                                         <td>{new Date(m.measurement_ts).toLocaleString()}</td>
                                         <td>
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                {getIcon(m.code)} {m.code}
+                                                {getIcon(m.code)} {getMetricFullName(m.code)}
                                             </span>
                                         </td>
                                         <td>{(m.value !== null && m.value !== undefined) ? m.value.toFixed(4) : '--'}</td>

@@ -682,10 +682,10 @@ export default function SeaLevelMonitor() {
                           }[key];
 
                           const label = {
-                            prs: 'Prs (m)',
-                            enc: 'ENC (m)',
-                            radar: 'Radar (m)',
-                            radar2: 'Radar 2 (m)'
+                            prs: ' meters',
+                            enc: ' meters',
+                            radar: 'meters',
+                            radar2: 'meters'
                           }[key];
 
                           return (
