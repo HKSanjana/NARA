@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --card-bg: #1e293b;
-  --card-border: #334155;
-  --primary: #3b82f6;
-  --primary-glow: rgba(59, 130, 246, 0.5);
-  --accent: #06b6d4;
-  --text-muted: #94a3b8;
+  --background: #ffffff;
+  --foreground: #000000;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-glow: rgba(37, 99, 235, 0.2);
+  --accent: #0891b2;
+  --text-muted: #000000;
   --font-base: 'Inter', system-ui, sans-serif;
-  
+
   /* NARA Brand Colors */
   --nara-navy: hsl(215, 100%, 21%);
   --nara-blue: hsl(198, 100%, 50%);
@@ -175,8 +175,8 @@ a {
 
 .sidebar {
   width: 280px;
-  background-color: var(--card-bg);
-  border-right: 1px solid var(--card-border);
+  background-color: #ffffff;
+  border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -209,7 +209,7 @@ a {
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-radius: 8px;
-  color: var(--text-muted);
+  color: #000000;
   transition: all 0.2s;
   font-weight: 500;
 }
@@ -269,7 +269,7 @@ a {
 .station-name {
   font-size: 1.125rem;
   font-weight: 600;
-  color: white;
+  color: #000000;
 }
 
 .timestamp {
@@ -300,7 +300,7 @@ a {
 .stat-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: white;
+  color: #000000;
 }
 
 .pulse {
@@ -344,14 +344,14 @@ a {
   padding: 1rem;
   font-size: 0.75rem;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--card-border);
+  color: #000000;
+  border-bottom: 2px solid #e5e7eb;
 }
 
 .data-table td {
   padding: 1rem;
-  border-bottom: 1px solid var(--card-border);
-  color: #f1f5f9;
+  border-bottom: 1px solid #e5e7eb;
+  color: #000000;
 }
 
 .data-table tr:hover {
@@ -400,11 +400,11 @@ a {
   .sidebar {
     display: none;
   }
-  
+
   .container {
     padding: 1rem;
   }
-  
+
   .grid {
     grid-template-columns: 1fr;
   }

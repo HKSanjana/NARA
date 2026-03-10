@@ -15,10 +15,10 @@ export default function Sidebar() {
             <div className="sidebar-header">
                 <Link href="/">
                     <a className="nav-link" style={{ padding: 0 }}>
-                        <div className="glass" style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Activity className="text-blue-400" />
+                        <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            <Activity className="text-blue-600" />
                         </div>
-                        <span style={{ fontWeight: 700, fontSize: '1.25rem', color: '#fff' }}>NARA</span>
+                        <span style={{ fontWeight: 700, fontSize: '1.25rem', color: '#000000' }}>NARA</span>
                     </a>
                 </Link>
             </div>

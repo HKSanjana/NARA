@@ -87,10 +87,10 @@ export default function StationDetail() {
 
     return (
         <DashboardLayout>
-            <div className="container">
+            <div className="container" style={{ backgroundColor: '#ffffff', color: '#000000', minHeight: '100vh', padding: '2rem' }}>
                 <div style={{ marginBottom: '2rem' }}>
                     <Link href="/">
-                        <a className="nav-link" style={{ width: 'fit-content', marginBottom: '1rem' }}>
+                        <a className="nav-link" style={{ width: 'fit-content', marginBottom: '1rem', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 500 }}>
                             <ChevronLeft size={20} />
                             <span>Back to Dashboard</span>
                         </a>
@@ -98,8 +98,8 @@ export default function StationDetail() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                         <div>
-                            <h1 className="title" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>{getStationDisplayName(station.name, station.station_id)}</h1>
-                            <div style={{ display: 'flex', gap: '1.5rem', color: 'var(--text-muted)' }}>
+                            <h1 className="title" style={{ fontSize: '2.5rem', marginBottom: '0.5rem', color: '#000000' }}>{getStationDisplayName(station.name, station.station_id)}</h1>
+                            <div style={{ display: 'flex', gap: '1.5rem', color: '#000000' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <MapPin size={16} />
                                     {station.latitude !== null && station.longitude !== null && station.latitude !== undefined && station.longitude !== undefined
@@ -111,8 +111,8 @@ export default function StationDetail() {
                                 </span>
                             </div>
                         </div>
-                        <div className="status-badge">
-                            <span className="pulse"></span>
+                        <div className="status-badge" style={{ background: '#ecfdf5', color: '#10b981', padding: '0.5rem 1rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, border: '1px solid #a7f3d0' }}>
+                            <span className="pulse" style={{ background: '#10b981' }}></span>
                             Reporting Live
                         </div>
                     </div>
@@ -122,13 +122,13 @@ export default function StationDetail() {
                     {activeMetrics.map(code => {
                         const latest = history.find(m => m.code === code);
                         return (latest && (
-                            <div key={code} className="stat-card glass">
-                                <div className="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div key={code} className="stat-card" style={{ background: '#ffffff', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                <div className="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#000000', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                     {getIcon(code)} {getMetricFullName(code)}
                                 </div>
-                                <div className="stat-value">
+                                <div className="stat-value" style={{ color: '#000000', fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
                                     {(latest.value !== null && latest.value !== undefined) ? latest.value.toFixed(2) : '--'}
-                                    <span style={{ fontSize: '1rem', marginLeft: '0.5rem', color: 'var(--text-muted)' }}>
+                                    <span style={{ fontSize: '1rem', marginLeft: '0.5rem', color: '#000000', fontWeight: 'normal' }}>
                                         {latest.unit || ''}
                                     </span>
                                 </div>
@@ -143,8 +143,8 @@ export default function StationDetail() {
                         if (data.length === 0) return null;
 
                         return (
-                            <div key={code} className="card glass station-card">
-                                <h3 className="chart-title" style={{ color: '#fff' }}>
+                            <div key={code} className="card station-card" style={{ background: '#ffffff', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                <h3 className="chart-title" style={{ color: '#000000', fontSize: '1.125rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                                     {getIcon(code)} {getMetricFullName(code)}
                                 </h3>
                                 <div className="chart-container">
@@ -156,21 +156,21 @@ export default function StationDetail() {
                                                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
                                             <XAxis
                                                 dataKey="time"
-                                                stroke="#64748b"
+                                                stroke="#000000"
                                                 fontSize={11}
                                                 tickMargin={10}
                                             />
                                             <YAxis
-                                                stroke="#64748b"
+                                                stroke="#000000"
                                                 fontSize={11}
                                                 domain={['auto', 'auto']}
                                             />
                                             <Tooltip
-                                                contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }}
-                                                labelStyle={{ color: '#fff', marginBottom: '4px' }}
+                                                contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', color: '#000000', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                                labelStyle={{ color: '#000000', marginBottom: '4px', fontWeight: 500 }}
                                             />
                                             <Area
                                                 type="monotone"
@@ -188,9 +188,9 @@ export default function StationDetail() {
                     })}
                 </div>
 
-                <div className="card glass" style={{ marginTop: '2rem' }}>
+                <div className="card" style={{ marginTop: '2rem', background: '#ffffff', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 className="chart-title" style={{ margin: 0, color: '#fff' }}>Data Log</h3>
+                        <h3 className="chart-title" style={{ margin: 0, color: '#000000', fontSize: '1.25rem', fontWeight: 'bold' }}>Data Log</h3>
                         <button
                             onClick={() => {
                                 const headers = ['Timestamp', 'Metric', 'Value', 'Unit'];
@@ -211,33 +211,34 @@ export default function StationDetail() {
                                 a.click();
                                 document.body.removeChild(a);
                             }}
-                            className="glass"
-                            style={{ padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--card-border)', color: '#fff' }}
+                            style={{ padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid #e5e7eb', color: '#000000', background: '#f9fafb', fontWeight: 500 }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                            onMouseOut={(e) => e.currentTarget.style.background = '#f9fafb'}
                         >
                             Export CSV
                         </button>
                     </div>
                     <div className="data-table-container">
-                        <table className="data-table">
+                        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                             <thead>
-                                <tr>
-                                    <th>Timestamp</th>
-                                    <th>Metric</th>
-                                    <th>Value</th>
-                                    <th>Unit</th>
+                                <tr style={{ borderBottom: '2px solid #e5e7eb', color: '#000000', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Timestamp</th>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Metric</th>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Value</th>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Unit</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style={{ color: '#000000' }}>
                                 {history.slice(0, 50).map((m, i) => (
-                                    <tr key={i}>
-                                        <td>{new Date(m.measurement_ts).toLocaleString()}</td>
-                                        <td>
+                                    <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                        <td style={{ padding: '0.75rem 1rem' }}>{new Date(m.measurement_ts).toLocaleString()}</td>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 {getIcon(m.code)} {getMetricFullName(m.code)}
                                             </span>
                                         </td>
-                                        <td>{(m.value !== null && m.value !== undefined) ? m.value.toFixed(4) : '--'}</td>
-                                        <td>{m.unit || '-'}</td>
+                                        <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{(m.value !== null && m.value !== undefined) ? m.value.toFixed(4) : '--'}</td>
+                                        <td style={{ padding: '0.75rem 1rem', color: '#000000' }}>{m.unit || '-'}</td>
                                     </tr>
                                 ))}
                             </tbody>
